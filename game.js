@@ -199,17 +199,17 @@ function spawnMonster() {
   const boss = type === "boss";
   const fast = type === "fast";
   const ranged = type === "ranged";
-  const baseHp = boss ? 12 + state.wave * 2 : brute ? 4 + Math.floor(state.wave / 3) : ranged ? 3 + Math.floor(state.wave / 5) : 2 + Math.floor(state.wave / 6);
+  const baseHp = boss ? 7 + Math.floor(state.wave * 0.7) : brute ? 3 + Math.floor(state.wave / 5) : ranged ? 2 + Math.floor(state.wave / 7) : 1 + Math.floor(state.wave / 8);
   monsters.push({
     x,
     y,
     r: boss ? 32 : brute ? 22 : fast ? 13 : ranged ? 16 : 15,
     hp: baseHp,
     maxHp: baseHp,
-    speed: boss ? 0.46 : brute ? rand(0.42, 0.68) : fast ? rand(1.08, 1.42) : ranged ? rand(0.55, 0.78) : rand(0.72, 1.08),
+    speed: boss ? 0.34 : brute ? rand(0.32, 0.52) : fast ? rand(0.82, 1.08) : ranged ? rand(0.42, 0.62) : rand(0.55, 0.82),
     wobble: rand(0, Math.PI * 2),
     hitFlash: 0,
-    shootCd: ranged || boss ? rand(700, 1300) : 0,
+    shootCd: ranged || boss ? rand(1450, 2200) : 0,
     type,
     brute,
     boss,
@@ -230,7 +230,7 @@ function dropOrb(x, y) {
 }
 
 function startWave() {
-  state.spawning = state.wave % 3 === 0 ? 5 + Math.floor(state.wave * 1.05) : 4 + Math.floor(state.wave * 1.35);
+  state.spawning = state.wave % 3 === 0 ? 2 + Math.floor(state.wave * 0.55) : 3 + Math.floor(state.wave * 0.82);
   state.spawnTimer = 0;
   ui.hint.textContent = state.wave % 3 === 0 ? `第 ${state.wave} 劫：妖王现身` : `第 ${state.wave} 劫`;
   showToast(state.wave % 3 === 0 ? `妖王现身：先斩小妖，再破妖王` : `第 ${state.wave} 劫来了`, true);
@@ -313,6 +313,22 @@ function attack() {
   burst(player.x, player.y, color.gold, 18, 3.8);
   tone(520, 0.08, "triangle", 0.034);
 
+  let blocked = 0;
+  for (let i = bullets.length - 1; i >= 0; i -= 1) {
+    const b = bullets[i];
+    if (Math.hypot(b.x - player.x, b.y - player.y) <= range + 16) {
+      blocked += 1;
+      state.score += 12;
+      state.energy = Math.min(100, state.energy + 4);
+      burst(b.x, b.y, color.magic, 14, 3.8);
+      bullets.splice(i, 1);
+    }
+  }
+  if (blocked > 0) {
+    state.shake = Math.max(state.shake, 5);
+    tone(860, 0.07, "triangle", 0.032);
+  }
+
   for (let i = monsters.length - 1; i >= 0; i -= 1) {
     const m = monsters[i];
     const distance = Math.hypot(m.x - player.x, m.y - player.y);
@@ -326,7 +342,7 @@ function attack() {
 
       if (m.hp <= 0) {
         state.score += m.boss ? 480 : m.brute ? 110 : m.ranged ? 80 : m.fast ? 65 : 45;
-        state.energy = Math.min(100, state.energy + (m.boss ? 34 : 12));
+        state.energy = Math.min(100, state.energy + (m.boss ? 42 : 18));
         burst(m.x, m.y, m.brute ? color.monster2 : color.monster, 34, 5.2);
         dropOrb(m.x, m.y);
         monsters.splice(i, 1);
@@ -395,7 +411,8 @@ function updateGame(dt) {
     }
   } else if (monsters.length === 0) {
     state.wave += 1;
-    player.hp = Math.min(100, player.hp + 14);
+    player.hp = Math.min(100, player.hp + 24);
+    state.energy = Math.min(100, state.energy + 16);
     state.score += 120;
     startWave();
   }
@@ -412,7 +429,7 @@ function updateGame(dt) {
     m.shootCd = Math.max(0, m.shootCd - dt);
 
     if ((m.ranged || m.boss) && m.shootCd <= 0) {
-      const bulletSpeed = m.boss ? 2.55 : 2.2;
+      const bulletSpeed = m.boss ? 1.72 : 1.52;
       bullets.push({
         x: m.x,
         y: m.y,
@@ -422,13 +439,13 @@ function updateGame(dt) {
         life: 2800,
         boss: m.boss,
       });
-      m.shootCd = m.boss ? 760 : 1250;
+      m.shootCd = m.boss ? 1750 : 2100;
       burst(m.x, m.y, color.ranged, 8, 2.8);
     }
 
     if (Math.hypot(m.x - player.x, m.y - player.y) < m.r + player.r) {
       if (player.invincible <= 0) {
-        player.hp -= m.brute ? 16 : 10;
+        player.hp -= m.boss ? 11 : m.brute ? 10 : 7;
         player.invincible = 650;
         player.hurt = 1;
         state.shake = 12;
@@ -445,7 +462,7 @@ function updateGame(dt) {
     b.life -= dt;
     if (Math.hypot(b.x - player.x, b.y - player.y) < b.r + player.r) {
       if (player.invincible <= 0) {
-        player.hp -= b.boss ? 14 : 9;
+        player.hp -= b.boss ? 9 : 6;
         player.invincible = 520;
         player.hurt = 1;
         state.shake = 10;
@@ -465,11 +482,12 @@ function updateGame(dt) {
     o.pulse += 0.08;
     if (Math.hypot(o.x - player.x, o.y - player.y) < o.r + player.r + 6) {
       if (o.heal) {
-        player.hp = Math.min(100, player.hp + 16);
+        player.hp = Math.min(100, player.hp + 26);
         state.score += 20;
         burst(o.x, o.y, color.good, 22, 4);
       } else {
         state.score += 55;
+        state.energy = Math.min(100, state.energy + 8);
         burst(o.x, o.y, color.gold, 22, 4);
       }
       tone(o.heal ? 680 : 820, 0.08, "triangle", 0.03);
