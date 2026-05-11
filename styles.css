@@ -70,18 +70,17 @@ button {
 .touch-pad,
 .attack-btn,
 .skill-btn,
-.actions,
 .toast {
   position: absolute;
   z-index: 2;
 }
 
 .top-ui {
-  top: 10px;
-  left: 10px;
-  right: 10px;
+  top: 8px;
+  left: 8px;
+  right: 8px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   pointer-events: none;
@@ -90,7 +89,7 @@ button {
 .top-ui > div,
 .stats div,
 .health,
-.actions button,
+.outer-actions button,
 .circle-btn,
 .attack-btn,
 .skill-btn,
@@ -102,8 +101,9 @@ button {
 
 .top-ui > div {
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 8px;
+  max-width: min(62vw, 360px);
 }
 
 h1 {
@@ -115,7 +115,7 @@ h1 {
 
 .top-ui p {
   margin: 5px 0 0;
-  max-width: 238px;
+  max-width: 100%;
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
@@ -133,17 +133,17 @@ h1 {
 }
 
 .stats {
-  top: 82px;
-  left: 10px;
-  right: 10px;
+  top: 62px;
+  left: 8px;
+  right: 8px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 7px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .stats div {
   min-width: 0;
-  padding: 8px 9px;
+  padding: 7px 8px;
   border-radius: 8px;
 }
 
@@ -158,16 +158,16 @@ h1 {
   display: block;
   margin-top: 3px;
   overflow: hidden;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
   text-overflow: ellipsis;
 }
 
 .health {
-  left: 10px;
-  right: 10px;
-  bottom: 132px;
-  padding: 10px;
+  left: 8px;
+  top: 108px;
+  width: min(220px, calc(100% - 16px));
+  padding: 8px 9px;
   border-radius: 8px;
 }
 
@@ -262,22 +262,20 @@ h1 {
   transform: scale(0.94);
 }
 
-.actions {
-  left: 50%;
-  bottom: 28px;
+.outer-actions {
   display: grid;
-  grid-template-columns: 72px;
-  gap: 7px;
-  transform: translateX(-50%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.actions button {
-  min-height: 34px;
+.outer-actions button {
+  min-height: 42px;
   border-radius: 8px;
   color: var(--ink);
 }
 
-.actions .primary {
+.outer-actions .primary {
   border: 0;
   color: #20120b;
   font-weight: 800;
@@ -307,19 +305,26 @@ h1 {
 @media (min-width: 760px) {
   .app {
     display: grid;
-    place-items: center;
+    grid-template-rows: minmax(0, 1fr) auto;
     padding: 20px;
+    gap: 10px;
   }
 
   .phone-game {
     width: min(430px, 100%);
     height: min(820px, 100%);
+    justify-self: center;
+  }
+
+  .outer-actions {
+    width: min(430px, 100%);
+    justify-self: center;
   }
 }
 
 @media (max-height: 650px) {
   .health {
-    bottom: 116px;
+    top: 100px;
   }
 
   .touch-pad,
@@ -332,5 +337,9 @@ h1 {
     right: 102px;
     width: 56px;
     height: 56px;
+  }
+
+  .outer-actions button {
+    min-height: 38px;
   }
 }
