@@ -1,0 +1,303 @@
+:root {
+  color-scheme: dark;
+  --ink: #fffaf4;
+  --muted: #c3b7a8;
+  --panel: rgba(16, 14, 20, 0.72);
+  --line: rgba(255, 255, 255, 0.16);
+  --good: #4af0a8;
+  --hit: #ff6b4a;
+  --gold: #ffd15c;
+  --magic: #7cc7ff;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255, 107, 74, 0.25), transparent 30%),
+    radial-gradient(circle at 85% 22%, rgba(124, 199, 255, 0.18), transparent 30%),
+    linear-gradient(180deg, #1a1018, #08070d);
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+.app {
+  width: 100vw;
+  height: 100dvh;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+}
+
+.phone-game {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 209, 92, 0.08), transparent 36%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.032) 0 1px, transparent 1px 50px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 50px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.top-ui,
+.stats,
+.health,
+.touch-pad,
+.attack-btn,
+.actions,
+.toast {
+  position: absolute;
+  z-index: 2;
+}
+
+.top-ui {
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.top-ui > div,
+.stats div,
+.health,
+.actions button,
+.circle-btn,
+.attack-btn,
+.toast {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+}
+
+.top-ui > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.top-ui p {
+  margin: 5px 0 0;
+  max-width: 238px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.circle-btn {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--ink);
+  pointer-events: auto;
+}
+
+.stats {
+  top: 82px;
+  left: 10px;
+  right: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.stats div {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: 8px;
+}
+
+.stats span,
+.health span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.stats b {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 20px;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+.health {
+  left: 10px;
+  right: 10px;
+  bottom: 132px;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.health > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.bar {
+  height: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.bar i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--hit), var(--gold), var(--good));
+  box-shadow: 0 0 18px rgba(255, 107, 74, 0.45);
+  transition: width 120ms ease;
+}
+
+.touch-pad {
+  left: 18px;
+  bottom: 24px;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(12px);
+}
+
+.stick {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #fff 0 10%, var(--gold) 28%, var(--hit) 100%);
+  box-shadow: 0 0 18px rgba(255, 209, 92, 0.7);
+  transform: translate(-50%, -50%);
+}
+
+.attack-btn {
+  right: 24px;
+  bottom: 30px;
+  width: 88px;
+  height: 88px;
+  border: 0;
+  border-radius: 50%;
+  color: #251009;
+  font-size: 26px;
+  font-weight: 900;
+  background: radial-gradient(circle at 35% 28%, #fff8d8 0 12%, var(--gold) 24%, var(--hit) 100%);
+  box-shadow:
+    0 0 28px rgba(255, 107, 74, 0.54),
+    0 12px 28px rgba(0, 0, 0, 0.32);
+}
+
+.attack-btn:active {
+  transform: scale(0.94);
+}
+
+.actions {
+  left: 50%;
+  bottom: 28px;
+  display: grid;
+  grid-template-columns: 72px;
+  gap: 7px;
+  transform: translateX(-50%);
+}
+
+.actions button {
+  min-height: 34px;
+  border-radius: 8px;
+  color: var(--ink);
+}
+
+.actions .primary {
+  border: 0;
+  color: #20120b;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--gold), var(--good));
+}
+
+.toast {
+  left: 50%;
+  top: 50%;
+  width: min(290px, calc(100% - 42px));
+  padding: 13px 16px;
+  border-radius: 8px;
+  color: rgba(255, 250, 244, 0.94);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+
+.toast.hide {
+  opacity: 0;
+  transform: translate(-50%, -58%);
+}
+
+@media (min-width: 760px) {
+  .app {
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+
+  .phone-game {
+    width: min(430px, 100%);
+    height: min(820px, 100%);
+  }
+}
+
+@media (max-height: 650px) {
+  .health {
+    bottom: 116px;
+  }
+
+  .touch-pad,
+  .attack-btn {
+    width: 80px;
+    height: 80px;
+  }
+}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>解压打怪场</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="phone-game" aria-label="解压打怪场">
+        <canvas id="game" aria-label="游戏画面"></canvas>
+
+        <header class="top-ui">
+          <div>
+            <h1>解压打怪场</h1>
+            <p id="hint">操控小英雄，挥剑清掉所有怪</p>
+          </div>
+          <button id="soundToggle" class="circle-btn" type="button" aria-label="切换声音">♪</button>
+        </header>
+
+        <section class="stats" aria-label="分数">
+          <div><span>分数</span><b id="score">0</b></div>
+          <div><span>波次</span><b id="wave">1</b></div>
+          <div><span>怪物</span><b id="monsters">0</b></div>
+        </section>
+
+        <section class="health" aria-label="生命">
+          <div><span>生命</span><b id="hpText">100%</b></div>
+          <div class="bar"><i id="hpFill"></i></div>
+        </section>
+
+        <div id="touchPad" class="touch-pad" aria-label="移动摇杆">
+          <div id="stick" class="stick"></div>
+        </div>
+
+        <button id="attackButton" class="attack-btn" type="button" aria-label="攻击">打</button>
+
+        <section class="actions" aria-label="操作">
+          <button id="startButton" class="primary" type="button">开始</button>
+          <button id="pauseButton" type="button">暂停</button>
+          <button id="resetButton" type="button">重开</button>
+        </section>
+
+        <div id="toast" class="toast">靠近怪物，点“打”挥剑攻击</div>
+      </section>
+    </main>
+    <script src="game.js"></script>
+  </body>
+</html>
