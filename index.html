@@ -6,31 +6,31 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-    <title>解压打怪场</title>
+    <title>御剑除妖</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app">
-      <section class="phone-game" aria-label="解压打怪场">
+      <section class="phone-game" aria-label="御剑除妖">
         <canvas id="game" aria-label="游戏画面"></canvas>
 
         <header class="top-ui">
           <div>
-            <h1>解压打怪场</h1>
-            <p id="hint">挥剑攒能量，满能量放大招</p>
+            <h1>御剑除妖</h1>
+            <p id="hint">挥剑聚灵，满灵气释放剑阵</p>
           </div>
           <button id="soundToggle" class="circle-btn" type="button" aria-label="切换声音">♪</button>
         </header>
 
         <section class="stats" aria-label="分数">
-          <div><span>分数</span><b id="score">0</b></div>
-          <div><span>波次</span><b id="wave">1</b></div>
-          <div><span>怪物</span><b id="monsters">0</b></div>
-          <div><span>能量</span><b id="energy">0%</b></div>
+          <div><span>功德</span><b id="score">0</b></div>
+          <div><span>劫数</span><b id="wave">1</b></div>
+          <div><span>妖物</span><b id="monsters">0</b></div>
+          <div><span>灵气</span><b id="energy">0%</b></div>
         </section>
 
-        <section class="health" aria-label="生命">
-          <div><span>生命</span><b id="hpText">100%</b></div>
+        <section class="health" aria-label="气血">
+          <div><span>气血</span><b id="hpText">100%</b></div>
           <div class="bar"><i id="hpFill"></i></div>
         </section>
 
@@ -38,8 +38,8 @@
           <div id="stick" class="stick"></div>
         </div>
 
-        <button id="attackButton" class="attack-btn" type="button" aria-label="攻击">打</button>
-        <button id="skillButton" class="skill-btn" type="button" aria-label="大招">爆</button>
+        <button id="attackButton" class="attack-btn" type="button" aria-label="挥剑">斩</button>
+        <button id="skillButton" class="skill-btn" type="button" aria-label="剑阵">阵</button>
 
         <section class="actions" aria-label="操作">
           <button id="startButton" class="primary" type="button">开始</button>
@@ -47,7 +47,7 @@
           <button id="resetButton" type="button">重开</button>
         </section>
 
-        <div id="toast" class="toast">快怪、胖怪、远程怪和 Boss 会轮流出现</div>
+        <div id="toast" class="toast">妖灵、鬼火、石妖和妖王会轮流出现</div>
       </section>
     </main>
     <script src="game.js"></script>

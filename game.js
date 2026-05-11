@@ -21,17 +21,19 @@ const ui = {
 };
 
 const color = {
-  player: "#ffd15c",
-  gold: "#ffd15c",
-  good: "#4af0a8",
-  hit: "#ff6b4a",
-  monster: "#b66cff",
-  monster2: "#ff4f86",
-  fast: "#4af0a8",
-  ranged: "#7cc7ff",
-  boss: "#ffcf4a",
-  magic: "#7cc7ff",
-  white: "#fffaf4",
+  player: "#f2c35d",
+  robe: "#4d8f8a",
+  gold: "#f2c35d",
+  good: "#80e0a7",
+  hit: "#d94f38",
+  monster: "#7e7ac9",
+  monster2: "#9b6b4a",
+  fast: "#62d6b1",
+  ranged: "#86d8ff",
+  boss: "#e0b34f",
+  magic: "#86d8ff",
+  ink: "#2b1b10",
+  white: "#fff9e8",
 };
 
 let width = 0;
@@ -230,8 +232,8 @@ function dropOrb(x, y) {
 function startWave() {
   state.spawning = state.wave % 3 === 0 ? 5 + Math.floor(state.wave * 1.05) : 4 + Math.floor(state.wave * 1.35);
   state.spawnTimer = 0;
-  ui.hint.textContent = state.wave % 3 === 0 ? `第 ${state.wave} 波：Boss 来了` : `第 ${state.wave} 波`;
-  showToast(state.wave % 3 === 0 ? `Boss 波：先清小怪，再打大家伙` : `第 ${state.wave} 波来了`, true);
+  ui.hint.textContent = state.wave % 3 === 0 ? `第 ${state.wave} 劫：妖王现身` : `第 ${state.wave} 劫`;
+  showToast(state.wave % 3 === 0 ? `妖王现身：先斩小妖，再破妖王` : `第 ${state.wave} 劫来了`, true);
   setTimeout(() => showToast("", false), 900);
 }
 
@@ -258,7 +260,7 @@ function startGame() {
   slashes.length = 0;
   bullets.length = 0;
   particles.length = 0;
-  ui.start.textContent = "进行中";
+  ui.start.textContent = "修行中";
   startWave();
   updateUi();
 }
@@ -267,8 +269,8 @@ function endGame() {
   state.running = false;
   state.paused = false;
   ui.start.textContent = "再来";
-  ui.hint.textContent = "生命耗尽";
-  showToast(`结束：${Math.floor(state.score)} 分，打到第 ${state.wave} 波`, true);
+  ui.hint.textContent = "气血耗尽";
+  showToast(`渡劫失败：${Math.floor(state.score)} 功德，打到第 ${state.wave} 劫`, true);
   state.shake = 22;
   burst(player.x, player.y, color.hit, 85, 6.6);
   tone(92, 0.32, "sawtooth", 0.045);
@@ -502,9 +504,30 @@ function updateParticles() {
 
 function drawFloor() {
   ctx.save();
+  ctx.translate(width / 2, height * 0.48);
+  ctx.strokeStyle = "rgba(242,195,93,0.14)";
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 4; i += 1) {
+    ctx.beginPath();
+    ctx.arc(0, 0, 70 + i * 36, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.rotate(performance.now() * 0.00012);
+  for (let i = 0; i < 8; i += 1) {
+    ctx.rotate(Math.PI / 4);
+    ctx.beginPath();
+    ctx.moveTo(0, -210);
+    ctx.lineTo(0, -170);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(242,195,93,0.12)";
+    ctx.fillRect(-5, -196, 10, 18);
+  }
+  ctx.restore();
+
+  ctx.save();
   for (const bit of floorBits) {
     ctx.globalAlpha = bit.a;
-    ctx.fillStyle = color.white;
+    ctx.fillStyle = color.gold;
     ctx.beginPath();
     ctx.arc(bit.x, bit.y, bit.r, 0, Math.PI * 2);
     ctx.fill();
@@ -534,27 +557,27 @@ function drawPlayer() {
   ctx.shadowColor = player.hurt > 0 ? color.white : color.gold;
   ctx.shadowBlur = 22;
 
-  // Sword and attack pose.
+  // Flying sword and attack pose.
   ctx.save();
   ctx.rotate(-0.65 - swing * 1.45);
-  ctx.strokeStyle = "#fff6ca";
-  ctx.lineWidth = 5 + swing * 2;
+  ctx.strokeStyle = "#f8fbff";
+  ctx.lineWidth = 4 + swing * 2;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(9, -5);
-  ctx.lineTo(35 + swing * 10, -19 - swing * 8);
+  ctx.moveTo(8, -5);
+  ctx.lineTo(39 + swing * 12, -20 - swing * 8);
   ctx.stroke();
   ctx.strokeStyle = color.magic;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(18, -9);
-  ctx.lineTo(36 + swing * 8, -19 - swing * 7);
+  ctx.lineTo(41 + swing * 9, -20 - swing * 7);
   ctx.stroke();
   ctx.restore();
 
   // Legs.
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = "#4c2c18";
+  ctx.strokeStyle = "#2f4f48";
   ctx.lineWidth = 6;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -564,16 +587,25 @@ function drawPlayer() {
   ctx.lineTo(10, 24 - legSwing * 0.45);
   ctx.stroke();
 
-  // Body armor.
+  // Taoist robe.
   ctx.shadowBlur = 18;
   const gradient = ctx.createRadialGradient(-5, -8, 2, 0, 0, 23);
   gradient.addColorStop(0, player.hurt > 0 ? "#ffffff" : "#fff8dc");
-  gradient.addColorStop(0.34, color.player);
-  gradient.addColorStop(1, color.hit);
+  gradient.addColorStop(0.32, color.robe);
+  gradient.addColorStop(1, "#1d554e");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.roundRect(-12 - run * 1.5, -12, 24 + run * 2, 29 - run * 1.5, 8);
   ctx.fill();
+
+  ctx.strokeStyle = color.gold;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-8, -6);
+  ctx.lineTo(8, 14);
+  ctx.moveTo(8, -6);
+  ctx.lineTo(-8, 14);
+  ctx.stroke();
 
   // Head.
   ctx.shadowBlur = 10;
@@ -583,10 +615,17 @@ function drawPlayer() {
   ctx.fill();
 
   // Hair.
-  ctx.fillStyle = "#2b170e";
+  ctx.fillStyle = "#22140c";
   ctx.beginPath();
   ctx.arc(-2 + swing * 1.5, -27 - breathe * 0.25, 9, Math.PI, Math.PI * 2);
   ctx.fill();
+
+  ctx.strokeStyle = color.gold;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-7 + swing * 1.5, -31 - breathe * 0.25);
+  ctx.lineTo(7 + swing * 1.5, -31 - breathe * 0.25);
+  ctx.stroke();
 
   // Arms.
   ctx.shadowBlur = 0;
@@ -621,7 +660,7 @@ function drawMonster(m) {
   ctx.shadowColor = body;
   ctx.shadowBlur = 18;
 
-  // Feet.
+  // Shadow and feet.
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
   ctx.ellipse(-7, m.r + 9, 8, 4, 0, 0, Math.PI * 2);
@@ -631,18 +670,34 @@ function drawMonster(m) {
   // Body.
   ctx.fillStyle = m.hitFlash > 0 ? color.white : body;
   ctx.beginPath();
-  ctx.roundRect(-m.r * 0.9, -m.r * 0.75, m.r * 1.8, m.r * 1.65, 10);
+  if (m.fast) {
+    ctx.moveTo(0, -m.r * 1.05);
+    ctx.bezierCurveTo(m.r, -m.r * 0.5, m.r * 0.82, m.r * 0.72, 0, m.r);
+    ctx.bezierCurveTo(-m.r * 0.82, m.r * 0.72, -m.r, -m.r * 0.5, 0, -m.r * 1.05);
+  } else if (m.ranged) {
+    ctx.arc(0, 0, m.r * 0.95, 0, Math.PI * 2);
+  } else if (m.boss) {
+    ctx.roundRect(-m.r, -m.r * 0.9, m.r * 2, m.r * 1.9, 12);
+  } else {
+    ctx.roundRect(-m.r * 0.9, -m.r * 0.75, m.r * 1.8, m.r * 1.65, 10);
+  }
   ctx.fill();
 
-  // Horns.
+  // Horns or flame crown.
   ctx.fillStyle = m.boss ? color.hit : color.gold;
   ctx.beginPath();
-  ctx.moveTo(-m.r * 0.55, -m.r * 0.7);
-  ctx.lineTo(-m.r * 0.9, -m.r * 1.15);
-  ctx.lineTo(-m.r * 0.25, -m.r * 0.82);
-  ctx.moveTo(m.r * 0.55, -m.r * 0.7);
-  ctx.lineTo(m.r * 0.9, -m.r * 1.15);
-  ctx.lineTo(m.r * 0.25, -m.r * 0.82);
+  if (m.fast) {
+    ctx.moveTo(0, -m.r * 1.2);
+    ctx.lineTo(-m.r * 0.28, -m.r * 0.78);
+    ctx.lineTo(m.r * 0.28, -m.r * 0.78);
+  } else {
+    ctx.moveTo(-m.r * 0.55, -m.r * 0.7);
+    ctx.lineTo(-m.r * 0.9, -m.r * 1.15);
+    ctx.lineTo(-m.r * 0.25, -m.r * 0.82);
+    ctx.moveTo(m.r * 0.55, -m.r * 0.7);
+    ctx.lineTo(m.r * 0.9, -m.r * 1.15);
+    ctx.lineTo(m.r * 0.25, -m.r * 0.82);
+  }
   ctx.fill();
 
   // Eyes.
@@ -656,10 +711,9 @@ function drawMonster(m) {
     ctx.strokeStyle = color.magic;
     ctx.lineWidth = 3;
     ctx.beginPath();
+    ctx.arc(0, 0, m.r * 1.25, -0.45, 0.45);
     ctx.moveTo(-m.r * 0.55, m.r * 0.08);
     ctx.lineTo(-m.r * 1.15, m.r * 0.08);
-    ctx.moveTo(m.r * 0.55, m.r * 0.08);
-    ctx.lineTo(m.r * 1.15, m.r * 0.08);
     ctx.stroke();
   }
 
