@@ -69,6 +69,7 @@ button {
 .health,
 .touch-pad,
 .attack-btn,
+.skill-btn,
 .actions,
 .toast {
   position: absolute;
@@ -92,6 +93,7 @@ button {
 .actions button,
 .circle-btn,
 .attack-btn,
+.skill-btn,
 .toast {
   border: 1px solid var(--line);
   background: var(--panel);
@@ -135,7 +137,7 @@ h1 {
   left: 10px;
   right: 10px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 7px;
 }
 
@@ -235,6 +237,31 @@ h1 {
   transform: scale(0.94);
 }
 
+.skill-btn {
+  right: 112px;
+  bottom: 38px;
+  width: 62px;
+  height: 62px;
+  border: 0;
+  border-radius: 50%;
+  color: #071018;
+  font-size: 22px;
+  font-weight: 900;
+  background: radial-gradient(circle at 35% 28%, #ffffff 0 12%, var(--magic) 28%, #9b7cff 100%);
+  box-shadow:
+    0 0 26px rgba(124, 199, 255, 0.58),
+    0 10px 24px rgba(0, 0, 0, 0.32);
+}
+
+.skill-btn:disabled {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+.skill-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 .actions {
   left: 50%;
   bottom: 28px;
@@ -299,5 +326,11 @@ h1 {
   .attack-btn {
     width: 80px;
     height: 80px;
+  }
+
+  .skill-btn {
+    right: 102px;
+    width: 56px;
+    height: 56px;
   }
 }

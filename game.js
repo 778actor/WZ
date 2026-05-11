@@ -5,6 +5,7 @@ const ui = {
   score: document.querySelector("#score"),
   wave: document.querySelector("#wave"),
   monsters: document.querySelector("#monsters"),
+  energy: document.querySelector("#energy"),
   hpText: document.querySelector("#hpText"),
   hpFill: document.querySelector("#hpFill"),
   hint: document.querySelector("#hint"),
@@ -16,6 +17,7 @@ const ui = {
   touchPad: document.querySelector("#touchPad"),
   stick: document.querySelector("#stick"),
   attack: document.querySelector("#attackButton"),
+  skill: document.querySelector("#skillButton"),
 };
 
 const color = {
@@ -25,6 +27,9 @@ const color = {
   hit: "#ff6b4a",
   monster: "#b66cff",
   monster2: "#ff4f86",
+  fast: "#4af0a8",
+  ranged: "#7cc7ff",
+  boss: "#ffcf4a",
   magic: "#7cc7ff",
   white: "#fffaf4",
 };
@@ -62,6 +67,7 @@ const state = {
   paused: false,
   score: 0,
   wave: 1,
+  energy: 0,
   spawning: 0,
   spawnTimer: 0,
   shake: 0,
@@ -72,6 +78,7 @@ const state = {
 const monsters = [];
 const orbs = [];
 const slashes = [];
+const bullets = [];
 const particles = [];
 const floorBits = [];
 
@@ -116,6 +123,8 @@ function updateUi() {
   ui.score.textContent = Math.floor(state.score);
   ui.wave.textContent = state.wave;
   ui.monsters.textContent = monsters.length + state.spawning;
+  ui.energy.textContent = `${Math.floor(state.energy)}%`;
+  ui.skill.disabled = state.energy < 100 || !state.running || state.paused;
   ui.hpText.textContent = `${Math.max(0, Math.round(player.hp))}%`;
   ui.hpFill.style.width = `${Math.max(0, Math.min(100, player.hp))}%`;
   ui.pause.textContent = state.paused ? "继续" : "暂停";
@@ -174,17 +183,36 @@ function spawnMonster() {
     y = rand(128, height - 145);
   }
 
-  const brute = Math.random() < Math.min(0.14 + state.wave * 0.018, 0.34);
+  let type = "grunt";
+  if (state.wave % 3 === 0 && state.spawning === 0) {
+    type = "boss";
+  } else {
+    const roll = Math.random();
+    if (roll < Math.min(0.18 + state.wave * 0.012, 0.34)) type = "fast";
+    else if (roll < Math.min(0.32 + state.wave * 0.016, 0.48)) type = "brute";
+    else if (state.wave >= 2 && roll > 0.78) type = "ranged";
+  }
+
+  const brute = type === "brute";
+  const boss = type === "boss";
+  const fast = type === "fast";
+  const ranged = type === "ranged";
+  const baseHp = boss ? 12 + state.wave * 2 : brute ? 4 + Math.floor(state.wave / 3) : ranged ? 3 + Math.floor(state.wave / 5) : 2 + Math.floor(state.wave / 6);
   monsters.push({
     x,
     y,
-    r: brute ? 20 : 15,
-    hp: brute ? 3 + Math.floor(state.wave / 4) : 2 + Math.floor(state.wave / 6),
-    maxHp: brute ? 3 + Math.floor(state.wave / 4) : 2 + Math.floor(state.wave / 6),
-    speed: brute ? rand(0.45, 0.72) : rand(0.72, 1.08),
+    r: boss ? 32 : brute ? 22 : fast ? 13 : ranged ? 16 : 15,
+    hp: baseHp,
+    maxHp: baseHp,
+    speed: boss ? 0.46 : brute ? rand(0.42, 0.68) : fast ? rand(1.08, 1.42) : ranged ? rand(0.55, 0.78) : rand(0.72, 1.08),
     wobble: rand(0, Math.PI * 2),
     hitFlash: 0,
+    shootCd: ranged || boss ? rand(700, 1300) : 0,
+    type,
     brute,
+    boss,
+    fast,
+    ranged,
   });
 }
 
@@ -200,10 +228,10 @@ function dropOrb(x, y) {
 }
 
 function startWave() {
-  state.spawning = 4 + Math.floor(state.wave * 1.35);
+  state.spawning = state.wave % 3 === 0 ? 5 + Math.floor(state.wave * 1.05) : 4 + Math.floor(state.wave * 1.35);
   state.spawnTimer = 0;
-  ui.hint.textContent = `第 ${state.wave} 波`;
-  showToast(`第 ${state.wave} 波来了`, true);
+  ui.hint.textContent = state.wave % 3 === 0 ? `第 ${state.wave} 波：Boss 来了` : `第 ${state.wave} 波`;
+  showToast(state.wave % 3 === 0 ? `Boss 波：先清小怪，再打大家伙` : `第 ${state.wave} 波来了`, true);
   setTimeout(() => showToast("", false), 900);
 }
 
@@ -212,6 +240,7 @@ function startGame() {
   state.paused = false;
   state.score = 0;
   state.wave = 1;
+  state.energy = 0;
   state.shake = 0;
   player.x = width / 2;
   player.y = height * 0.62;
@@ -227,6 +256,7 @@ function startGame() {
   monsters.length = 0;
   orbs.length = 0;
   slashes.length = 0;
+  bullets.length = 0;
   particles.length = 0;
   ui.start.textContent = "进行中";
   startWave();
@@ -293,7 +323,8 @@ function attack() {
       burst(m.x, m.y, color.magic, 16, 4.4);
 
       if (m.hp <= 0) {
-        state.score += m.brute ? 90 : 45;
+        state.score += m.boss ? 480 : m.brute ? 110 : m.ranged ? 80 : m.fast ? 65 : 45;
+        state.energy = Math.min(100, state.energy + (m.boss ? 34 : 12));
         burst(m.x, m.y, m.brute ? color.monster2 : color.monster, 34, 5.2);
         dropOrb(m.x, m.y);
         monsters.splice(i, 1);
@@ -301,6 +332,50 @@ function attack() {
       }
     }
   }
+  updateUi();
+}
+
+function castSkill() {
+  if (!state.running || state.paused || state.energy < 100) return;
+  state.energy = 0;
+  state.shake = 18;
+  slashes.push({
+    x: player.x,
+    y: player.y,
+    r: 24,
+    max: 150,
+    life: 1,
+    angle: player.facing,
+    full: true,
+  });
+  burst(player.x, player.y, color.magic, 70, 7.2);
+  tone(980, 0.18, "sine", 0.05);
+
+  for (let i = monsters.length - 1; i >= 0; i -= 1) {
+    const m = monsters[i];
+    const distance = Math.hypot(m.x - player.x, m.y - player.y);
+    if (distance <= 150 + m.r) {
+      m.hp -= 3;
+      m.hitFlash = 180;
+      const angle = Math.atan2(m.y - player.y, m.x - player.x);
+      m.x += Math.cos(angle) * 36;
+      m.y += Math.sin(angle) * 36;
+      burst(m.x, m.y, color.magic, 26, 6);
+      if (m.hp <= 0) {
+        state.score += m.boss ? 520 : m.brute ? 120 : m.ranged ? 90 : m.fast ? 70 : 50;
+        dropOrb(m.x, m.y);
+        monsters.splice(i, 1);
+      }
+    }
+  }
+
+  for (let i = bullets.length - 1; i >= 0; i -= 1) {
+    if (Math.hypot(bullets[i].x - player.x, bullets[i].y - player.y) <= 170) {
+      burst(bullets[i].x, bullets[i].y, color.ranged, 8, 3);
+      bullets.splice(i, 1);
+    }
+  }
+
   updateUi();
 }
 
@@ -326,10 +401,28 @@ function updateGame(dt) {
   for (const m of monsters) {
     m.wobble += 0.06;
     const angle = Math.atan2(player.y - m.y, player.x - m.x);
-    const speed = (m.speed + state.wave * 0.025) * (m.brute ? 0.92 : 1);
-    m.x += Math.cos(angle) * speed + Math.cos(m.wobble) * 0.18;
-    m.y += Math.sin(angle) * speed + Math.sin(m.wobble) * 0.18;
+    const distance = Math.hypot(player.x - m.x, player.y - m.y);
+    const keepAway = m.ranged && distance < 135 ? -0.7 : 1;
+    const speed = (m.speed + state.wave * 0.025) * (m.brute ? 0.92 : 1) * keepAway;
+    m.x += Math.cos(angle) * speed + Math.cos(m.wobble) * (m.fast ? 0.38 : 0.18);
+    m.y += Math.sin(angle) * speed + Math.sin(m.wobble) * (m.fast ? 0.38 : 0.18);
     m.hitFlash = Math.max(0, m.hitFlash - dt);
+    m.shootCd = Math.max(0, m.shootCd - dt);
+
+    if ((m.ranged || m.boss) && m.shootCd <= 0) {
+      const bulletSpeed = m.boss ? 2.55 : 2.2;
+      bullets.push({
+        x: m.x,
+        y: m.y,
+        vx: Math.cos(angle) * bulletSpeed,
+        vy: Math.sin(angle) * bulletSpeed,
+        r: m.boss ? 8 : 6,
+        life: 2800,
+        boss: m.boss,
+      });
+      m.shootCd = m.boss ? 760 : 1250;
+      burst(m.x, m.y, color.ranged, 8, 2.8);
+    }
 
     if (Math.hypot(m.x - player.x, m.y - player.y) < m.r + player.r) {
       if (player.invincible <= 0) {
@@ -340,6 +433,28 @@ function updateGame(dt) {
         burst(player.x, player.y, color.hit, 24, 4.8);
         tone(145, 0.12, "sawtooth", 0.04);
       }
+    }
+  }
+
+  for (let i = bullets.length - 1; i >= 0; i -= 1) {
+    const b = bullets[i];
+    b.x += b.vx;
+    b.y += b.vy;
+    b.life -= dt;
+    if (Math.hypot(b.x - player.x, b.y - player.y) < b.r + player.r) {
+      if (player.invincible <= 0) {
+        player.hp -= b.boss ? 14 : 9;
+        player.invincible = 520;
+        player.hurt = 1;
+        state.shake = 10;
+        burst(player.x, player.y, color.ranged, 20, 4.2);
+        tone(180, 0.1, "sawtooth", 0.035);
+      }
+      bullets.splice(i, 1);
+      continue;
+    }
+    if (b.life <= 0 || b.x < -40 || b.x > width + 40 || b.y < -40 || b.y > height + 40) {
+      bullets.splice(i, 1);
     }
   }
 
@@ -497,13 +612,13 @@ function drawPlayer() {
 
 function drawMonster(m) {
   const hurtScale = m.hitFlash > 0 ? 1.12 : 1;
-  const body = m.brute ? color.monster2 : color.monster;
+  const body = m.boss ? color.boss : m.ranged ? color.ranged : m.fast ? color.fast : m.brute ? color.monster2 : color.monster;
   const hop = Math.sin(m.wobble * 1.8) * (m.brute ? 1.2 : 2.1);
   const squash = 1 + Math.sin(m.wobble * 1.8) * 0.045;
   ctx.save();
   ctx.translate(m.x, m.y + hop);
   ctx.scale(hurtScale * (1 + (squash - 1) * 0.5), hurtScale * (1 - (squash - 1)));
-  ctx.shadowColor = m.brute ? color.monster2 : color.monster;
+  ctx.shadowColor = body;
   ctx.shadowBlur = 18;
 
   // Feet.
@@ -520,7 +635,7 @@ function drawMonster(m) {
   ctx.fill();
 
   // Horns.
-  ctx.fillStyle = color.gold;
+  ctx.fillStyle = m.boss ? color.hit : color.gold;
   ctx.beginPath();
   ctx.moveTo(-m.r * 0.55, -m.r * 0.7);
   ctx.lineTo(-m.r * 0.9, -m.r * 1.15);
@@ -536,6 +651,17 @@ function drawMonster(m) {
   ctx.arc(-m.r * 0.34, -m.r * 0.12, m.r * 0.14, 0, Math.PI * 2);
   ctx.arc(m.r * 0.34, -m.r * 0.12, m.r * 0.14, 0, Math.PI * 2);
   ctx.fill();
+
+  if (m.ranged || m.boss) {
+    ctx.strokeStyle = color.magic;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-m.r * 0.55, m.r * 0.08);
+    ctx.lineTo(-m.r * 1.15, m.r * 0.08);
+    ctx.moveTo(m.r * 0.55, m.r * 0.08);
+    ctx.lineTo(m.r * 1.15, m.r * 0.08);
+    ctx.stroke();
+  }
 
   // Mouth.
   ctx.strokeStyle = "#160b1f";
@@ -575,15 +701,31 @@ function drawSlash(s) {
   ctx.save();
   ctx.globalAlpha = Math.max(0, s.life);
   ctx.strokeStyle = color.magic;
-  ctx.lineWidth = 7;
+  ctx.lineWidth = s.full ? 10 : 7;
   ctx.lineCap = "round";
   ctx.shadowColor = color.magic;
-  ctx.shadowBlur = 22;
+  ctx.shadowBlur = s.full ? 34 : 22;
   ctx.translate(s.x, s.y);
   ctx.rotate(s.angle);
   ctx.beginPath();
-  ctx.arc(0, 0, s.r, -0.85, 0.85);
+  ctx.arc(0, 0, s.r, s.full ? 0 : -0.85, s.full ? Math.PI * 2 : 0.85);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawBullet(b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.shadowColor = color.ranged;
+  ctx.shadowBlur = b.boss ? 20 : 14;
+  ctx.fillStyle = b.boss ? color.boss : color.ranged;
+  ctx.beginPath();
+  ctx.arc(0, 0, b.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.72)";
+  ctx.beginPath();
+  ctx.arc(-b.r * 0.25, -b.r * 0.25, b.r * 0.28, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -609,6 +751,7 @@ function render() {
   drawFloor();
   for (const o of orbs) drawOrb(o);
   for (const s of slashes) drawSlash(s);
+  for (const b of bullets) drawBullet(b);
   for (const m of monsters) drawMonster(m);
   drawPlayer();
   drawParticles();
@@ -669,6 +812,11 @@ ui.touchPad.addEventListener("pointercancel", releaseStick);
 ui.attack.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   attack();
+});
+
+ui.skill.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  castSkill();
 });
 
 canvas.addEventListener("pointerdown", () => {
