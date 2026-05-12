@@ -17,7 +17,6 @@ const ui = {
   touchPad: document.querySelector("#touchPad"),
   stick: document.querySelector("#stick"),
   attack: document.querySelector("#attackButton"),
-  skill: document.querySelector("#skillButton"),
   weaponShop: document.querySelector("#weaponShop"),
 };
 
@@ -70,10 +69,14 @@ const state = {
   score: 0,
   wave: 1,
   energy: 0,
+  ultimate: 0,
+  ultimateTimer: 0,
+  ultimateCd: 0,
   spawning: 0,
   spawnTimer: 0,
   autoAttackTimer: 0,
   autoAttackCd: 0,
+  autoSkillCd: 0,
   autoDifficulty: 0,
   combo: 0,
   comboTimer: 0,
@@ -90,6 +93,7 @@ const monsters = [];
 const bullets = [];
 const orbs = [];
 const slashes = [];
+const ultimates = [];
 const particles = [];
 const floorBits = [];
 const popups = [];
@@ -221,6 +225,10 @@ function addScore(amount, x, y, label = "") {
   popup(x, y, `${label}+${total}`, comboBonus > 0 ? color.magic : color.gold, comboBonus > 0 ? 16 : 14);
 }
 
+function gainUltimate(amount) {
+  state.ultimate = Math.min(100, state.ultimate + amount);
+}
+
 function addKillCombo(x, y) {
   state.combo += 1;
   state.comboTimer = 1800;
@@ -236,6 +244,7 @@ function defeatMonster(m, index, score) {
   addKillCombo(m.x, m.y);
   addScore(score, m.x, m.y);
   state.energy = Math.min(100, state.energy + (m.boss ? 42 : 18));
+  gainUltimate(m.boss ? 18 : 5 + Math.min(9, state.combo * 0.18));
   burst(m.x, m.y, m.brute ? color.brute : color.monster, m.boss ? 55 : 34, m.boss ? 6.6 : 5.2);
   dropOrb(m.x, m.y, m.boss || state.combo % 12 === 0);
   if (m.boss || Math.random() < 0.05 + Math.min(0.12, state.wave * 0.006)) dropChest(m.x, m.y);
@@ -247,11 +256,10 @@ function updateUi() {
   ui.score.textContent = Math.floor(state.score);
   ui.wave.textContent = state.wave;
   ui.monsters.textContent = monsters.length + state.spawning;
-  ui.energy.textContent = `${Math.floor(state.energy)}%`;
+  ui.energy.textContent = state.ultimate >= 100 ? "大招!" : `${Math.floor(state.energy)}%`;
   if (state.autoAttackTimer > 0) {
-    ui.hint.textContent = `自动御剑 ${Math.ceil(state.autoAttackTimer / 1000)} 秒，妖潮压迫提升`;
+    ui.hint.textContent = `御剑加速 ${Math.ceil(state.autoAttackTimer / 1000)} 秒，妖潮压迫提升`;
   }
-  ui.skill.disabled = state.energy < 100 || !state.running || state.paused;
   ui.hpText.textContent = `${Math.max(0, Math.round(player.hp))}%`;
   ui.hpFill.style.width = `${Math.max(0, Math.min(100, player.hp))}%`;
   ui.pause.textContent = state.paused ? "继续" : "暂停";
@@ -327,8 +335,12 @@ function startGame() {
   state.score = 0;
   state.wave = 1;
   state.energy = 0;
+  state.ultimate = 0;
+  state.ultimateTimer = 0;
+  state.ultimateCd = 0;
   state.autoAttackTimer = 0;
   state.autoAttackCd = 0;
+  state.autoSkillCd = 0;
   state.autoDifficulty = 0;
   state.combo = 0;
   state.comboTimer = 0;
@@ -352,6 +364,7 @@ function startGame() {
   bullets.length = 0;
   orbs.length = 0;
   slashes.length = 0;
+  ultimates.length = 0;
   particles.length = 0;
   ui.start.textContent = "修行中";
   startWave();
@@ -374,7 +387,8 @@ function grantAutoAttackReward() {
   const bonusTime = 5200 + state.wave * 420;
   state.autoAttackTimer += bonusTime;
   state.autoDifficulty += 0.08;
-  showToast(`破劫奖励：自动御剑 ${Math.ceil(bonusTime / 1000)} 秒，妖潮增强`, true);
+  gainUltimate(16);
+  showToast(`破劫奖励：御剑加速 ${Math.ceil(bonusTime / 1000)} 秒，妖潮增强`, true);
   burst(player.x, player.y, color.magic, 42, 5.6);
   tone(1040, 0.14, "sine", 0.045);
 }
@@ -479,10 +493,11 @@ function collectChest(chest) {
   const roll = Math.random();
   if (roll < 0.34) {
     state.autoAttackTimer += 6500;
-    popup(chest.x, chest.y, "自动御剑+6秒", color.magic, 16);
-    showToast("秘匣：自动御剑延长", true);
+    popup(chest.x, chest.y, "御剑加速+6秒", color.magic, 16);
+    showToast("秘匣：御剑加速延长", true);
   } else if (roll < 0.68) {
     state.energy = 100;
+    gainUltimate(22);
     popup(chest.x, chest.y, "灵气全满", color.magic, 16);
     showToast("秘匣：剑阵已满", true);
   } else {
@@ -536,6 +551,7 @@ function attack() {
       blocked += 1;
       addScore(12, b.x, b.y, "破弹");
       state.energy = Math.min(100, state.energy + 4);
+      gainUltimate(2);
       burst(b.x, b.y, color.magic, 14, 3.8);
       bullets.splice(i, 1);
     }
@@ -560,7 +576,6 @@ function attack() {
 }
 
 function autoAttack(dt) {
-  if (state.autoAttackTimer <= 0) return;
   state.autoAttackTimer = Math.max(0, state.autoAttackTimer - dt);
   state.autoAttackCd = Math.max(0, state.autoAttackCd - dt);
   if (state.autoAttackCd > 0) return;
@@ -592,6 +607,7 @@ function autoAttack(dt) {
     if (Math.hypot(b.x - player.x, b.y - player.y) <= range + 12) {
       addScore(8, b.x, b.y, "破弹");
       state.energy = Math.min(100, state.energy + 3);
+      gainUltimate(1.5);
       burst(b.x, b.y, color.magic, 10, 3.2);
       bullets.splice(i, 1);
     }
@@ -605,10 +621,27 @@ function autoAttack(dt) {
   if (m.hp <= 0) {
     defeatMonster(m, targetIndex, m.boss ? 480 : m.brute ? 110 : m.ranged ? 80 : m.fast ? 65 : 45);
   }
-  state.autoAttackCd = Math.max(210, 560 - state.wave * 10);
+  const haste = state.autoAttackTimer > 0 ? 0.58 : 1;
+  state.autoAttackCd = Math.max(190, (560 - state.wave * 10) * haste);
 }
 
-function castSkill() {
+function autoCastSkill(dt) {
+  state.autoSkillCd = Math.max(0, state.autoSkillCd - dt);
+  state.ultimateCd = Math.max(0, state.ultimateCd - dt);
+  if (state.ultimate >= 100 && state.ultimateCd <= 0 && monsters.length > 0) {
+    castUltimate();
+    return;
+  }
+  if (state.energy < 100 || state.autoSkillCd > 0 || monsters.length === 0) return;
+  const dangerCount = monsters.filter((m) => Math.hypot(m.x - player.x, m.y - player.y) <= 230).length;
+  const bulletDanger = bullets.some((b) => Math.hypot(b.x - player.x, b.y - player.y) <= 240);
+  if (dangerCount >= 3 || bulletDanger || player.hp <= 42) {
+    castSkill(true);
+    state.autoSkillCd = 1800;
+  }
+}
+
+function castSkill(auto = false) {
   if (!state.running || state.paused || state.energy < 100) return;
   const weapon = currentWeapon();
   state.energy = 0;
@@ -625,6 +658,12 @@ function castSkill() {
   });
   burst(player.x, player.y, weapon.glow, 70, 7.2);
   tone(980, 0.18, "sine", 0.05);
+  if (auto) {
+    showToast("灵气满溢：自动释放剑阵", true);
+    setTimeout(() => {
+      if (state.running) showToast("", false);
+    }, 800);
+  }
 
   for (let i = monsters.length - 1; i >= 0; i -= 1) {
     const m = monsters[i];
@@ -650,15 +689,64 @@ function castSkill() {
   updateUi();
 }
 
+function castUltimate() {
+  if (!state.running || state.paused || state.ultimate < 100) return;
+  const weapon = currentWeapon();
+  state.ultimate = 0;
+  state.ultimateCd = 4500;
+  state.ultimateTimer = 1800;
+  state.shake = 34;
+  showToast("大招：万剑归宗", true);
+  popup(player.x, player.y - 48, "万剑归宗", weapon.glow, 24);
+  burst(player.x, player.y, weapon.glow, 140, 10);
+  tone(1280, 0.24, "sine", 0.06);
+
+  for (let i = 0; i < 12; i += 1) {
+    ultimates.push({
+      x: player.x,
+      y: player.y,
+      angle: (Math.PI * 2 * i) / 12,
+      life: 1,
+      r: 40 + i * 8,
+      glow: weapon.glow,
+    });
+  }
+
+  for (let i = bullets.length - 1; i >= 0; i -= 1) {
+    burst(bullets[i].x, bullets[i].y, weapon.glow, 10, 4);
+    bullets.splice(i, 1);
+  }
+
+  for (let i = monsters.length - 1; i >= 0; i -= 1) {
+    const m = monsters[i];
+    m.hp -= weaponDamage(m.boss ? 9 : 7);
+    m.hitFlash = 260;
+    const angle = Math.atan2(m.y - player.y, m.x - player.x);
+    m.x += Math.cos(angle) * 58;
+    m.y += Math.sin(angle) * 58;
+    burst(m.x, m.y, weapon.glow, 34, 7);
+    if (m.hp <= 0) {
+      defeatMonster(m, i, m.boss ? 900 : m.brute ? 180 : m.ranged ? 150 : m.fast ? 120 : 100);
+    }
+  }
+
+  setTimeout(() => {
+    if (state.running) showToast("", false);
+  }, 1200);
+  updateUi();
+}
+
 function updateGame(dt) {
   if (!state.running || state.paused) return;
   movePlayer(dt);
   autoAttack(dt);
+  autoCastSkill(dt);
   if (state.comboTimer > 0) {
     state.comboTimer = Math.max(0, state.comboTimer - dt);
     if (state.comboTimer === 0) state.combo = 0;
   }
   state.rageTimer = Math.max(0, state.rageTimer - dt);
+  state.ultimateTimer = Math.max(0, state.ultimateTimer - dt);
 
   if (state.spawning > 0) {
     state.spawnTimer += dt;
@@ -676,6 +764,7 @@ function updateGame(dt) {
     if (state.wave % 5 === 0) {
       dropChest(player.x + rand(-28, 28), player.y - 44);
       state.energy = 100;
+      gainUltimate(22);
       showToast(`第 ${state.wave} 劫大奖：秘匣降临，剑阵已满`, true);
     }
     startWave();
@@ -763,6 +852,12 @@ function updateGame(dt) {
     s.r += (s.max - s.r) * 0.24;
     s.life -= 0.08;
     if (s.life <= 0) slashes.splice(i, 1);
+  }
+  for (let i = ultimates.length - 1; i >= 0; i -= 1) {
+    const u = ultimates[i];
+    u.r += 18;
+    u.life -= 0.045;
+    if (u.life <= 0) ultimates.splice(i, 1);
   }
 
   player.swing = Math.max(0, player.swing - dt / 230);
@@ -1050,6 +1145,36 @@ function drawSlash(s) {
   ctx.restore();
 }
 
+function drawUltimates() {
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const u of ultimates) {
+    ctx.globalAlpha = Math.max(0, u.life);
+    ctx.strokeStyle = u.glow;
+    ctx.lineWidth = 7 + u.life * 7;
+    ctx.lineCap = "round";
+    ctx.shadowColor = u.glow;
+    ctx.shadowBlur = 28;
+    ctx.save();
+    ctx.translate(u.x, u.y);
+    ctx.rotate(u.angle + performance.now() * 0.004);
+    ctx.beginPath();
+    ctx.moveTo(-u.r * 0.15, 0);
+    ctx.lineTo(u.r, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, u.r * 0.48, -0.4, 0.4);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (state.ultimateTimer > 0) {
+    ctx.globalAlpha = Math.min(0.35, state.ultimateTimer / 1800);
+    ctx.fillStyle = currentWeapon().glow;
+    ctx.fillRect(0, 0, width, height);
+  }
+  ctx.restore();
+}
+
 function drawBullet(b) {
   ctx.save();
   ctx.translate(b.x, b.y);
@@ -1103,6 +1228,7 @@ function render() {
   drawFloor();
   for (const o of orbs) drawOrb(o);
   for (const s of slashes) drawSlash(s);
+  drawUltimates();
   for (const b of bullets) drawBullet(b);
   for (const m of monsters) drawMonster(m);
   drawPlayer();
@@ -1177,14 +1303,6 @@ function releaseStick(event) {
 
 ui.touchPad.addEventListener("pointerup", releaseStick);
 ui.touchPad.addEventListener("pointercancel", releaseStick);
-ui.attack.addEventListener("pointerdown", (event) => {
-  event.preventDefault();
-  attack();
-});
-ui.skill.addEventListener("pointerdown", (event) => {
-  event.preventDefault();
-  castSkill();
-});
 canvas.addEventListener("pointerdown", () => {
   if (!state.running) startGame();
 });
@@ -1206,8 +1324,6 @@ window.addEventListener("keydown", (event) => {
   if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(event.code)) {
     event.preventDefault();
   }
-  if (!event.repeat && (event.code === "Space" || event.code === "KeyJ")) attack();
-  if (!event.repeat && (event.code === "KeyE" || event.code === "KeyK")) castSkill();
   if (!event.repeat && event.code === "Enter" && !state.running) startGame();
   if (!event.repeat && event.code === "KeyR") startGame();
   if (!event.repeat && event.code === "KeyP" && state.running) {
@@ -1228,5 +1344,5 @@ window.addEventListener("resize", resize);
 resize();
 setupWeaponShop();
 updateUi();
-showToast("WASD/方向键移动，空格或 J 挥剑，E 放剑阵", true);
+showToast("一只手移动即可；普通攻击和剑阵都会自动触发", true);
 requestAnimationFrame(frame);

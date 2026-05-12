@@ -199,10 +199,11 @@ h1 {
 }
 
 .touch-pad {
-  left: 18px;
+  left: 50%;
   bottom: 24px;
   width: 92px;
   height: 92px;
+  transform: translateX(-50%);
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.09);
@@ -222,6 +223,7 @@ h1 {
 }
 
 .attack-btn {
+  display: none;
   right: 24px;
   bottom: 30px;
   width: 88px;
