@@ -2,7 +2,8 @@
   color-scheme: dark;
   --ink: #fff9e8;
   --muted: #d9c7a6;
-  --panel: rgba(24, 18, 12, 0.7);
+  --panel: rgba(24, 18, 12, 0.52);
+  --panel-light: rgba(24, 18, 12, 0.34);
   --line: rgba(255, 230, 180, 0.2);
   --good: #80e0a7;
   --hit: #d94f38;
@@ -108,6 +109,12 @@ button {
   padding: 8px 10px;
   border-radius: 8px;
   max-width: min(62vw, 360px);
+  background: var(--panel-light);
+}
+
+.stats div,
+.health {
+  background: var(--panel-light);
 }
 
 h1 {

@@ -54,6 +54,11 @@ const player = {
   swing: 0,
   walk: 0,
   hurt: 0,
+  maxHp: 100,
+  damageBonus: 0,
+  rangeBonus: 0,
+  attackHaste: 1,
+  energyBonus: 0,
 };
 
 const input = {
@@ -82,6 +87,10 @@ const state = {
   comboTimer: 0,
   chestCount: 0,
   rageTimer: 0,
+  relics: [],
+  unlockedSkills: [],
+  skillTimers: {},
+  skillBoost: 0,
   equippedWeapon: "moon",
   ownedWeapons: new Set(["moon"]),
   shake: 0,
@@ -98,6 +107,60 @@ const particles = [];
 const floorBits = [];
 const popups = [];
 const keys = new Set();
+const meritGainRate = 0.6;
+
+const skillPool = [
+  { id: "thunderChain", name: "雷链", color: "#b388ff", interval: 1900 },
+  { id: "fireRing", name: "火环", color: "#ff6b3a", interval: 2400 },
+  { id: "iceBurst", name: "冰爆", color: "#86d8ff", interval: 2800 },
+  { id: "meteor", name: "星坠", color: "#79ffc8", interval: 3300 },
+  { id: "shadowBlade", name: "影刃", color: "#f7fbff", interval: 1600 },
+  { id: "holyShield", name: "护身莲", color: "#ffe36b", interval: 4200 },
+];
+
+const relicPool = [
+  {
+    id: "might",
+    name: "剑心",
+    desc: "永久伤害提升",
+    apply() {
+      player.damageBonus += 0.18;
+    },
+  },
+  {
+    id: "vital",
+    name: "金身",
+    desc: "气血上限提升并回复",
+    apply() {
+      player.maxHp += 16;
+      player.hp = Math.min(player.maxHp, player.hp + 28);
+    },
+  },
+  {
+    id: "range",
+    name: "剑域",
+    desc: "攻击范围提升",
+    apply() {
+      player.rangeBonus += 0.12;
+    },
+  },
+  {
+    id: "haste",
+    name: "疾影",
+    desc: "御剑速度提升",
+    apply() {
+      player.attackHaste *= 0.9;
+    },
+  },
+  {
+    id: "spirit",
+    name: "聚灵",
+    desc: "能量与大招充能提升",
+    apply() {
+      player.energyBonus += 0.16;
+    },
+  },
+];
 
 const weapons = [
   {
@@ -108,37 +171,41 @@ const weapons = [
     range: 1,
     fill: "#f8fbff",
     glow: color.magic,
+    shape: "crescent",
     label: "初始",
   },
   {
     id: "flame",
     name: "赤焰刀",
-    cost: 900,
+    cost: 40000,
     damage: 1.6,
     range: 1.08,
     fill: "#fff2c2",
     glow: "#ff6b3a",
-    label: "900",
+    shape: "saber",
+    label: "40000",
   },
   {
     id: "thunder",
-    name: "雷鸣戟",
-    cost: 2200,
+    name: "雷鸣锤",
+    cost: 80000,
     damage: 2.35,
     range: 1.18,
     fill: "#f7fbff",
     glow: "#b388ff",
-    label: "2200",
+    shape: "hammer",
+    label: "80000",
   },
   {
     id: "star",
     name: "星陨镰",
-    cost: 5200,
+    cost: 160000,
     damage: 3.4,
     range: 1.32,
     fill: "#fff8d8",
     glow: "#79ffc8",
-    label: "5200",
+    shape: "scythe",
+    label: "160000",
   },
 ];
 
@@ -219,14 +286,15 @@ function popup(x, y, text, fill = color.gold, size = 14) {
 }
 
 function addScore(amount, x, y, label = "") {
-  const comboBonus = state.combo >= 8 ? Math.floor(amount * Math.min(1.2, state.combo * 0.035)) : 0;
-  const total = amount + comboBonus;
+  const scaledAmount = Math.max(1, Math.floor(amount * meritGainRate));
+  const comboBonus = state.combo >= 8 ? Math.floor(scaledAmount * Math.min(0.9, state.combo * 0.028)) : 0;
+  const total = scaledAmount + comboBonus;
   state.score += total;
   popup(x, y, `${label}+${total}`, comboBonus > 0 ? color.magic : color.gold, comboBonus > 0 ? 16 : 14);
 }
 
 function gainUltimate(amount) {
-  state.ultimate = Math.min(100, state.ultimate + amount);
+  state.ultimate = Math.min(100, state.ultimate + amount * (1 + player.energyBonus));
 }
 
 function addKillCombo(x, y) {
@@ -243,11 +311,11 @@ function addKillCombo(x, y) {
 function defeatMonster(m, index, score) {
   addKillCombo(m.x, m.y);
   addScore(score, m.x, m.y);
-  state.energy = Math.min(100, state.energy + (m.boss ? 42 : 18));
+  gainEnergy(m.boss ? 42 : 18);
   gainUltimate(m.boss ? 18 : 5 + Math.min(9, state.combo * 0.18));
   burst(m.x, m.y, m.brute ? color.brute : color.monster, m.boss ? 55 : 34, m.boss ? 6.6 : 5.2);
-  dropOrb(m.x, m.y, m.boss || state.combo % 12 === 0);
-  if (m.boss || Math.random() < 0.05 + Math.min(0.12, state.wave * 0.006)) dropChest(m.x, m.y);
+  dropOrb(m.x, m.y, m.finalBoss || (m.boss && Math.random() < 0.55) || state.combo % 18 === 0);
+  if (m.finalBoss || (m.boss && Math.random() < 0.75) || Math.random() < 0.025 + Math.min(0.07, state.wave * 0.0035)) dropChest(m.x, m.y);
   monsters.splice(index, 1);
   tone(m.boss ? 920 : 760, 0.1, "sine", 0.034);
 }
@@ -260,26 +328,41 @@ function updateUi() {
   if (state.autoAttackTimer > 0) {
     ui.hint.textContent = `御剑加速 ${Math.ceil(state.autoAttackTimer / 1000)} 秒，妖潮压迫提升`;
   }
-  ui.hpText.textContent = `${Math.max(0, Math.round(player.hp))}%`;
-  ui.hpFill.style.width = `${Math.max(0, Math.min(100, player.hp))}%`;
+  ui.hpText.textContent = `${Math.max(0, Math.round(player.hp))}/${Math.round(player.maxHp)}`;
+  ui.hpFill.style.width = `${Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100))}%`;
   ui.pause.textContent = state.paused ? "继续" : "暂停";
   updateWeaponShop();
 }
 
 function swordScale() {
-  return 1.18 + Math.min(0.82, (state.wave - 1) * 0.055);
+  return 1.77 + Math.min(1.35, (state.wave - 1) * 0.075);
+}
+
+function outfitStyle() {
+  const tier = Math.min(4, Math.floor((state.wave - 1) / 10));
+  return [
+    { cloak: "rgba(255, 92, 168, 0.72)", trim: "rgba(255, 190, 225, 0.75)", armor: "#322115", robe: color.robe, glow: color.gold },
+    { cloak: "rgba(120, 40, 210, 0.78)", trim: "rgba(210, 170, 255, 0.82)", armor: "#211138", robe: "#3b248c", glow: "#b388ff" },
+    { cloak: "rgba(178, 36, 24, 0.8)", trim: "rgba(255, 188, 90, 0.86)", armor: "#3a180d", robe: "#7e221a", glow: "#ff6b3a" },
+    { cloak: "rgba(18, 42, 70, 0.84)", trim: "rgba(134, 216, 255, 0.9)", armor: "#101a28", robe: "#123f74", glow: color.magic },
+    { cloak: "rgba(12, 12, 18, 0.88)", trim: "rgba(255, 227, 107, 0.95)", armor: "#08070a", robe: "#3a3050", glow: color.gold },
+  ][tier];
 }
 
 function currentWeapon() {
   return weapons.find((weapon) => weapon.id === state.equippedWeapon) || weapons[0];
 }
 
+function gainEnergy(amount) {
+  state.energy = Math.min(100, state.energy + amount * (1 + player.energyBonus));
+}
+
 function weaponDamage(multiplier = 1) {
-  return currentWeapon().damage * multiplier;
+  return currentWeapon().damage * (1 + player.damageBonus) * multiplier;
 }
 
 function weaponRange() {
-  return currentWeapon().range;
+  return currentWeapon().range * (1 + player.rangeBonus);
 }
 
 function updateWeaponShop() {
@@ -346,6 +429,10 @@ function startGame() {
   state.comboTimer = 0;
   state.chestCount = 0;
   state.rageTimer = 0;
+  state.relics = [];
+  state.unlockedSkills = [];
+  state.skillTimers = {};
+  state.skillBoost = 0;
   state.equippedWeapon = "moon";
   state.ownedWeapons = new Set(["moon"]);
   state.shake = 0;
@@ -353,7 +440,12 @@ function startGame() {
   player.y = height * 0.62;
   player.vx = 0;
   player.vy = 0;
-  player.hp = 100;
+  player.maxHp = 100;
+  player.hp = player.maxHp;
+  player.damageBonus = 0;
+  player.rangeBonus = 0;
+  player.attackHaste = 1;
+  player.energyBonus = 0;
   player.invincible = 800;
   player.attackCd = 0;
   player.swing = 0;
@@ -371,15 +463,37 @@ function startGame() {
   updateUi();
 }
 
+function unlockNextSkill() {
+  const skill = skillPool.find((item) => !state.unlockedSkills.includes(item.id));
+  if (!skill) {
+    state.skillBoost += 0.06;
+    popup(player.x, player.y - 70, "技能共鸣强化", color.magic, 20);
+    showToast(`突破奖励：所有自动技能冷却缩短 ${Math.round(state.skillBoost * 100)}%`, true);
+    burst(player.x, player.y, color.magic, 44, 5.5);
+    return;
+  }
+  state.unlockedSkills.push(skill.id);
+  state.skillTimers[skill.id] = 450;
+  popup(player.x, player.y - 70, `新技能：${skill.name}`, skill.color, 20);
+  showToast(`突破奖励：解锁自动技能「${skill.name}」`, true);
+  burst(player.x, player.y, skill.color, 58, 6);
+  tone(900 + state.unlockedSkills.length * 80, 0.16, "triangle", 0.042);
+}
+
+function skillById(id) {
+  return skillPool.find((skill) => skill.id === id);
+}
+
 function startWave() {
-  const pressure = 1 + state.autoDifficulty;
+  const depth = Math.max(0, state.wave - 1);
+  const pressure = 1 + state.autoDifficulty + depth * 0.045;
   state.spawning =
     state.wave % 3 === 0
-      ? Math.ceil((4 + state.wave * 0.82) * pressure)
-      : Math.ceil((5 + state.wave * 1.16) * pressure);
+      ? Math.ceil((4 + state.wave * 0.95) * pressure)
+      : Math.ceil((5 + state.wave * 1.34) * pressure);
   state.spawnTimer = 0;
-  ui.hint.textContent = state.wave % 3 === 0 ? `第 ${state.wave} 劫：妖王现身` : `第 ${state.wave} 劫`;
-  showToast(state.wave % 3 === 0 ? "妖王现身：先斩小妖，再破妖王" : `第 ${state.wave} 劫来了`, true);
+  ui.hint.textContent = state.wave % 10 === 0 ? `第 ${state.wave} 劫：终极妖王降临` : state.wave % 3 === 0 ? `第 ${state.wave} 劫：妖王现身` : `第 ${state.wave} 劫`;
+  showToast(state.wave % 10 === 0 ? "终极妖王降临：撑住这一层" : state.wave % 3 === 0 ? "妖王现身：先斩小妖，再破妖王" : `第 ${state.wave} 劫来了`, true);
   setTimeout(() => showToast("", false), 900);
 }
 
@@ -391,6 +505,17 @@ function grantAutoAttackReward() {
   showToast(`破劫奖励：御剑加速 ${Math.ceil(bonusTime / 1000)} 秒，妖潮增强`, true);
   burst(player.x, player.y, color.magic, 42, 5.6);
   tone(1040, 0.14, "sine", 0.045);
+}
+
+function grantRelicReward() {
+  const relic = relicPool[Math.floor(rand(0, relicPool.length))];
+  relic.apply();
+  state.relics.push(relic.name);
+  state.shake = Math.max(state.shake, 14);
+  popup(player.x, player.y - 58, `永久奖励：${relic.name}`, color.good, 20);
+  showToast(`第 ${state.wave} 劫奖励：${relic.name} - ${relic.desc}`, true);
+  burst(player.x, player.y, color.good, 56, 6);
+  tone(1180, 0.18, "triangle", 0.045);
 }
 
 function endGame() {
@@ -406,6 +531,7 @@ function endGame() {
 }
 
 function spawnMonster() {
+  const depth = Math.max(0, state.wave - 1);
   const side = Math.floor(rand(0, 4));
   let x;
   let y;
@@ -424,39 +550,46 @@ function spawnMonster() {
   }
 
   let type = "grunt";
-  if (state.wave % 3 === 0 && state.spawning === 0) {
+  if (state.wave % 10 === 0 && state.spawning === 0) {
+    type = "finalBoss";
+  } else if (state.wave % 3 === 0 && state.spawning === 0) {
     type = "boss";
   } else {
     const roll = Math.random();
-    if (roll < Math.min(0.22 + state.wave * 0.016, 0.42)) type = "fast";
-    else if (roll < Math.min(0.4 + state.wave * 0.02, 0.58)) type = "brute";
-    else if (state.wave >= 2 && roll > 0.68) type = "ranged";
+    if (roll < Math.min(0.24 + depth * 0.019, 0.5)) type = "fast";
+    else if (roll < Math.min(0.44 + depth * 0.026, 0.66)) type = "brute";
+    else if (state.wave >= 2 && roll > Math.max(0.48, 0.68 - depth * 0.018)) type = "ranged";
   }
 
-  const boss = type === "boss";
+  const finalBoss = type === "finalBoss";
+  const boss = type === "boss" || finalBoss;
   const brute = type === "brute";
   const fast = type === "fast";
   const ranged = type === "ranged";
   const baseHp = boss
-    ? 10 + Math.floor(state.wave * 1.05)
+    ? (finalBoss ? 42 + Math.floor(state.wave * 3.6) : 12 + Math.floor(state.wave * 1.35))
     : brute
-      ? 5 + Math.floor(state.wave / 4)
+      ? 6 + Math.floor(state.wave / 3)
       : ranged
-        ? 4 + Math.floor(state.wave / 6)
-        : 1 + Math.floor(state.wave / 7);
-  const hp = Math.ceil(baseHp * (1 + state.autoDifficulty * 0.32));
+        ? 5 + Math.floor(state.wave / 4)
+        : 2 + Math.floor(state.wave / 6);
+  const hp = Math.ceil(baseHp * (1 + depth * 0.07 + state.autoDifficulty * 0.38));
+  const speedScale = 1 + depth * 0.018 + state.autoDifficulty * 0.1;
 
   monsters.push({
     x,
     y,
-    r: boss ? 32 : brute ? 22 : fast ? 13 : ranged ? 16 : 15,
+    r: finalBoss ? 44 : boss ? 32 : brute ? 22 : fast ? 13 : ranged ? 16 : 15,
     hp,
     maxHp: hp,
-    speed: boss ? 0.46 : brute ? rand(0.42, 0.66) : fast ? rand(1.08, 1.38) : ranged ? rand(0.54, 0.78) : rand(0.72, 1.02),
+    speed:
+      (finalBoss ? 0.42 : boss ? 0.5 : brute ? rand(0.46, 0.72) : fast ? rand(1.16, 1.52) : ranged ? rand(0.6, 0.86) : rand(0.78, 1.12)) *
+      speedScale,
     wobble: rand(0, Math.PI * 2),
     hitFlash: 0,
     shootCd: ranged || boss ? rand(1300, 2000) : 0,
     type,
+    finalBoss,
     boss,
     brute,
     fast,
@@ -465,10 +598,10 @@ function spawnMonster() {
 }
 
 function dropOrb(x, y, force = false) {
-  if (!force && Math.random() > 0.42) return;
+  if (!force && Math.random() > 0.25) return;
   orbs.push({
-    x,
-    y,
+    x: Math.max(28, Math.min(width - 28, x)),
+    y: Math.max(34, Math.min(height - 34, y)),
     r: 8,
     heal: Math.random() < 0.35,
     chest: false,
@@ -479,8 +612,8 @@ function dropOrb(x, y, force = false) {
 function dropChest(x, y) {
   state.chestCount += 1;
   orbs.push({
-    x,
-    y,
+    x: Math.max(34, Math.min(width - 34, x)),
+    y: Math.max(40, Math.min(height - 40, y)),
     r: 12,
     heal: false,
     chest: true,
@@ -501,7 +634,7 @@ function collectChest(chest) {
     popup(chest.x, chest.y, "灵气全满", color.magic, 16);
     showToast("秘匣：剑阵已满", true);
   } else {
-    player.hp = Math.min(100, player.hp + 38);
+    player.hp = Math.min(player.maxHp, player.hp + 38);
     addScore(240, chest.x, chest.y, "秘匣");
     popup(chest.x, chest.y, "回血+功德", color.good, 16);
     showToast("秘匣：气血恢复，功德暴涨", true);
@@ -527,8 +660,8 @@ function movePlayer(dt) {
   player.vy += (ay - player.vy) * 0.3;
   player.x += player.vx;
   player.y += player.vy;
-  player.x = Math.max(player.r + 8, Math.min(width - player.r - 8, player.x));
-  player.y = Math.max(118, Math.min(height - 132, player.y));
+  player.x = Math.max(player.r + 4, Math.min(width - player.r - 4, player.x));
+  player.y = Math.max(player.r + 12, Math.min(height - player.r - 12, player.y));
   player.invincible = Math.max(0, player.invincible - dt);
   player.attackCd = Math.max(0, player.attackCd - dt);
   player.hurt = Math.max(0, player.hurt - dt / 220);
@@ -550,7 +683,7 @@ function attack() {
     if (Math.hypot(b.x - player.x, b.y - player.y) <= range + 16) {
       blocked += 1;
       addScore(12, b.x, b.y, "破弹");
-      state.energy = Math.min(100, state.energy + 4);
+      gainEnergy(4);
       gainUltimate(2);
       burst(b.x, b.y, color.magic, 14, 3.8);
       bullets.splice(i, 1);
@@ -568,7 +701,7 @@ function attack() {
       m.hitFlash = 120;
       burst(m.x, m.y, color.magic, 16, 4.4);
       if (m.hp <= 0) {
-        defeatMonster(m, i, m.boss ? 480 : m.brute ? 110 : m.ranged ? 80 : m.fast ? 65 : 45);
+        defeatMonster(m, i, m.finalBoss ? 1500 : m.boss ? 480 : m.brute ? 110 : m.ranged ? 80 : m.fast ? 65 : 45);
       }
     }
   }
@@ -596,7 +729,6 @@ function autoAttack(dt) {
 
   const m = monsters[targetIndex];
   const angle = Math.atan2(m.y - player.y, m.x - player.x);
-  player.facing = angle;
   player.swing = Math.max(player.swing, 0.7);
   slashes.push({ x: player.x, y: player.y, r: 18, max: range, life: 1, angle, auto: true, glow: weapon.glow });
   burst(player.x, player.y, weapon.glow, 10, 3.4);
@@ -606,7 +738,7 @@ function autoAttack(dt) {
     const b = bullets[i];
     if (Math.hypot(b.x - player.x, b.y - player.y) <= range + 12) {
       addScore(8, b.x, b.y, "破弹");
-      state.energy = Math.min(100, state.energy + 3);
+      gainEnergy(3);
       gainUltimate(1.5);
       burst(b.x, b.y, color.magic, 10, 3.2);
       bullets.splice(i, 1);
@@ -619,10 +751,10 @@ function autoAttack(dt) {
   m.y += Math.sin(angle) * 14;
   burst(m.x, m.y, color.magic, 14, 4);
   if (m.hp <= 0) {
-    defeatMonster(m, targetIndex, m.boss ? 480 : m.brute ? 110 : m.ranged ? 80 : m.fast ? 65 : 45);
+    defeatMonster(m, targetIndex, m.finalBoss ? 1500 : m.boss ? 480 : m.brute ? 110 : m.ranged ? 80 : m.fast ? 65 : 45);
   }
   const haste = state.autoAttackTimer > 0 ? 0.58 : 1;
-  state.autoAttackCd = Math.max(190, (560 - state.wave * 10) * haste);
+  state.autoAttackCd = Math.max(170, (560 - state.wave * 10) * haste * player.attackHaste);
 }
 
 function autoCastSkill(dt) {
@@ -641,6 +773,80 @@ function autoCastSkill(dt) {
   }
 }
 
+function updateUnlockedSkills(dt) {
+  for (const skillId of state.unlockedSkills) {
+    const skill = skillById(skillId);
+    if (!skill) continue;
+    state.skillTimers[skillId] = Math.max(0, (state.skillTimers[skillId] ?? skill.interval) - dt);
+    if (state.skillTimers[skillId] > 0) continue;
+    triggerUnlockedSkill(skill);
+    state.skillTimers[skillId] = Math.max(520, skill.interval * player.attackHaste * Math.max(0.55, 1 - state.skillBoost));
+  }
+}
+
+function triggerUnlockedSkill(skill) {
+  if (monsters.length === 0) return;
+  const weapon = currentWeapon();
+  if (skill.id === "thunderChain") {
+    const targets = [...monsters]
+      .sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))
+      .slice(0, 4);
+    for (const target of targets) {
+      target.hp -= weaponDamage(1.15);
+      target.hitFlash = 180;
+      slashes.push({ x: player.x, y: player.y, r: 20, max: Math.hypot(target.x - player.x, target.y - player.y), life: 0.62, angle: Math.atan2(target.y - player.y, target.x - player.x), glow: skill.color, beam: true });
+      burst(target.x, target.y, skill.color, 14, 4);
+    }
+  } else if (skill.id === "fireRing") {
+    slashes.push({ x: player.x, y: player.y, r: 40, max: 155 * weaponRange(), life: 1, angle: 0, full: true, glow: skill.color, spiral: true });
+    for (const m of monsters) {
+      if (Math.hypot(m.x - player.x, m.y - player.y) <= 160 * weaponRange() + m.r) {
+        m.hp -= weaponDamage(0.9);
+        m.hitFlash = 160;
+        burst(m.x, m.y, skill.color, 8, 3.5);
+      }
+    }
+  } else if (skill.id === "iceBurst") {
+    for (const m of monsters) {
+      if (Math.hypot(m.x - player.x, m.y - player.y) <= 190 * weaponRange() + m.r) {
+        m.hp -= weaponDamage(0.7);
+        m.slow = 900;
+        m.hitFlash = 150;
+      }
+    }
+    ultimates.push({ x: player.x, y: player.y, angle: 0, life: 0.7, r: 70, glow: skill.color, ring: true });
+    burst(player.x, player.y, skill.color, 38, 5);
+  } else if (skill.id === "meteor") {
+    const target = monsters[Math.floor(rand(0, monsters.length))];
+    if (target) {
+      target.hp -= weaponDamage(2.2);
+      target.hitFlash = 220;
+      ultimates.push({ x: target.x, y: target.y, angle: rand(0, Math.PI), life: 0.85, r: 55, glow: skill.color, ring: true });
+      burst(target.x, target.y, skill.color, 52, 7);
+      state.shake = Math.max(state.shake, 8);
+    }
+  } else if (skill.id === "shadowBlade") {
+    const count = Math.min(5, monsters.length);
+    for (let i = 0; i < count; i += 1) {
+      const m = monsters[Math.floor(rand(0, monsters.length))];
+      if (!m) continue;
+      m.hp -= weaponDamage(0.85);
+      slashes.push({ x: m.x - 34, y: m.y, r: 12, max: 72, life: 0.75, angle: rand(-0.5, 0.5), glow: skill.color, auto: true });
+      burst(m.x, m.y, skill.color, 8, 3.5);
+    }
+  } else if (skill.id === "holyShield") {
+    player.hp = Math.min(player.maxHp, player.hp + 10);
+    player.invincible = Math.max(player.invincible, 460);
+    ultimates.push({ x: player.x, y: player.y, angle: 0, life: 0.95, r: 54, glow: skill.color, ring: true });
+    burst(player.x, player.y, skill.color, 24, 4);
+  }
+
+  for (let i = monsters.length - 1; i >= 0; i -= 1) {
+    const m = monsters[i];
+    if (m.hp <= 0) defeatMonster(m, i, m.finalBoss ? 1800 : m.boss ? 620 : m.brute ? 135 : m.ranged ? 110 : m.fast ? 90 : 70);
+  }
+}
+
 function castSkill(auto = false) {
   if (!state.running || state.paused || state.energy < 100) return;
   const weapon = currentWeapon();
@@ -655,6 +861,28 @@ function castSkill(auto = false) {
     angle: player.facing,
     full: true,
     glow: weapon.glow,
+  });
+  for (let i = 0; i < 6; i += 1) {
+    slashes.push({
+      x: player.x,
+      y: player.y,
+      r: 18 + i * 7,
+      max: (130 + i * 24) * weaponRange(),
+      life: 1 - i * 0.08,
+      angle: player.facing + (Math.PI * 2 * i) / 6,
+      full: i % 2 === 0,
+      glow: i % 2 === 0 ? weapon.glow : color.gold,
+      spiral: true,
+    });
+  }
+  ultimates.push({
+    x: player.x,
+    y: player.y,
+    angle: player.facing,
+    life: 0.75,
+    r: 30,
+    glow: weapon.glow,
+    ring: true,
   });
   burst(player.x, player.y, weapon.glow, 70, 7.2);
   tone(980, 0.18, "sine", 0.05);
@@ -675,7 +903,7 @@ function castSkill(auto = false) {
       m.y += Math.sin(angle) * 36;
       burst(m.x, m.y, color.magic, 26, 6);
       if (m.hp <= 0) {
-        defeatMonster(m, i, m.boss ? 520 : m.brute ? 120 : m.ranged ? 90 : m.fast ? 70 : 50);
+        defeatMonster(m, i, m.finalBoss ? 1700 : m.boss ? 520 : m.brute ? 120 : m.ranged ? 90 : m.fast ? 70 : 50);
       }
     }
   }
@@ -701,14 +929,25 @@ function castUltimate() {
   burst(player.x, player.y, weapon.glow, 140, 10);
   tone(1280, 0.24, "sine", 0.06);
 
-  for (let i = 0; i < 12; i += 1) {
+  for (let i = 0; i < 18; i += 1) {
     ultimates.push({
       x: player.x,
       y: player.y,
-      angle: (Math.PI * 2 * i) / 12,
+      angle: (Math.PI * 2 * i) / 18,
       life: 1,
       r: 40 + i * 8,
       glow: weapon.glow,
+    });
+  }
+  for (let i = 0; i < 3; i += 1) {
+    ultimates.push({
+      x: player.x,
+      y: player.y,
+      angle: i * 0.7,
+      life: 1,
+      r: 36 + i * 30,
+      glow: i === 1 ? color.gold : weapon.glow,
+      ring: true,
     });
   }
 
@@ -726,7 +965,7 @@ function castUltimate() {
     m.y += Math.sin(angle) * 58;
     burst(m.x, m.y, weapon.glow, 34, 7);
     if (m.hp <= 0) {
-      defeatMonster(m, i, m.boss ? 900 : m.brute ? 180 : m.ranged ? 150 : m.fast ? 120 : 100);
+      defeatMonster(m, i, m.finalBoss ? 2600 : m.boss ? 900 : m.brute ? 180 : m.ranged ? 150 : m.fast ? 120 : 100);
     }
   }
 
@@ -741,6 +980,7 @@ function updateGame(dt) {
   movePlayer(dt);
   autoAttack(dt);
   autoCastSkill(dt);
+  updateUnlockedSkills(dt);
   if (state.comboTimer > 0) {
     state.comboTimer = Math.max(0, state.comboTimer - dt);
     if (state.comboTimer === 0) state.combo = 0;
@@ -750,21 +990,23 @@ function updateGame(dt) {
 
   if (state.spawning > 0) {
     state.spawnTimer += dt;
-    if (state.spawnTimer >= Math.max(135, 560 - state.wave * 34 - state.autoDifficulty * 110)) {
+    if (state.spawnTimer >= Math.max(95, 540 - state.wave * 42 - state.autoDifficulty * 125)) {
       state.spawnTimer = 0;
       state.spawning -= 1;
       spawnMonster();
     }
   } else if (monsters.length === 0) {
     state.wave += 1;
-    player.hp = Math.min(100, player.hp + 22);
-    state.energy = Math.min(100, state.energy + 14);
+    player.hp = Math.min(player.maxHp, player.hp + 22);
+    gainEnergy(14);
     addScore(120, player.x, player.y - 30, "破劫");
     grantAutoAttackReward();
+    unlockNextSkill();
     if (state.wave % 5 === 0) {
       dropChest(player.x + rand(-28, 28), player.y - 44);
       state.energy = 100;
       gainUltimate(22);
+      grantRelicReward();
       showToast(`第 ${state.wave} 劫大奖：秘匣降临，剑阵已满`, true);
     }
     startWave();
@@ -774,27 +1016,31 @@ function updateGame(dt) {
     m.wobble += 0.06;
     const angle = Math.atan2(player.y - m.y, player.x - m.x);
     const distance = Math.hypot(player.x - m.x, player.y - m.y);
-    const keepAway = m.ranged && distance < 135 ? -0.7 : 1;
-    const speed = (m.speed + state.wave * 0.038 + state.autoDifficulty * 0.16) * (m.brute ? 0.95 : 1) * keepAway;
-    m.x += Math.cos(angle) * speed + Math.cos(m.wobble) * (m.fast ? 0.38 : 0.18);
-    m.y += Math.sin(angle) * speed + Math.sin(m.wobble) * (m.fast ? 0.38 : 0.18);
+    m.slow = Math.max(0, (m.slow || 0) - dt);
+    const keepAway = m.ranged && distance < 150 ? -0.75 : 1;
+    const nearEase = distance < 96 && !m.ranged ? 0.42 + distance / 190 : 1;
+    const slowFactor = m.slow > 0 ? 0.46 : 1;
+    const speed = (m.speed + state.wave * 0.026 + state.autoDifficulty * 0.12) * (m.brute ? 0.9 : 1) * keepAway * nearEase * slowFactor;
+    const strafe = distance < 118 && !m.ranged ? (m.fast ? 0.42 : 0.28) : m.fast ? 0.24 : 0.12;
+    m.x += Math.cos(angle) * speed + Math.cos(angle + Math.PI / 2) * Math.sin(m.wobble) * strafe;
+    m.y += Math.sin(angle) * speed + Math.sin(angle + Math.PI / 2) * Math.sin(m.wobble) * strafe;
     m.hitFlash = Math.max(0, m.hitFlash - dt);
     m.shootCd = Math.max(0, m.shootCd - dt);
     if ((m.ranged || m.boss) && m.shootCd <= 0) {
       bullets.push({
         x: m.x,
         y: m.y,
-        vx: Math.cos(angle) * (m.boss ? 2.16 : 1.88),
-        vy: Math.sin(angle) * (m.boss ? 2.16 : 1.88),
-        r: m.boss ? 8 : 6,
+        vx: Math.cos(angle) * (m.finalBoss ? 2.35 : m.boss ? 2.16 : 1.88),
+        vy: Math.sin(angle) * (m.finalBoss ? 2.35 : m.boss ? 2.16 : 1.88),
+        r: m.finalBoss ? 10 : m.boss ? 8 : 6,
         life: 2800,
         boss: m.boss,
       });
-      m.shootCd = m.boss ? 1320 : 1680;
+      m.shootCd = m.finalBoss ? 980 : m.boss ? 1320 : 1680;
       burst(m.x, m.y, color.ranged, 8, 2.8);
     }
     if (distance < m.r + player.r && player.invincible <= 0) {
-      player.hp -= (m.boss ? 16 : m.brute ? 13 : 9) * (1 + state.autoDifficulty * 0.18);
+      player.hp -= (m.finalBoss ? 24 : m.boss ? 16 : m.brute ? 13 : 9) * (1 + state.wave * 0.026 + state.autoDifficulty * 0.2);
       state.combo = 0;
       state.comboTimer = 0;
       player.invincible = 650;
@@ -812,7 +1058,7 @@ function updateGame(dt) {
     b.life -= dt;
     if (Math.hypot(b.x - player.x, b.y - player.y) < b.r + player.r) {
       if (player.invincible <= 0) {
-        player.hp -= (b.boss ? 12 : 9) * (1 + state.autoDifficulty * 0.16);
+        player.hp -= (b.boss ? 13 : 9) * (1 + state.wave * 0.022 + state.autoDifficulty * 0.18);
         state.combo = 0;
         state.comboTimer = 0;
         player.invincible = 520;
@@ -830,16 +1076,16 @@ function updateGame(dt) {
   for (let i = orbs.length - 1; i >= 0; i -= 1) {
     const o = orbs[i];
     o.pulse += 0.08;
-    if (Math.hypot(o.x - player.x, o.y - player.y) < o.r + player.r + (o.chest ? 12 : 6)) {
+    if (Math.hypot(o.x - player.x, o.y - player.y) < o.r + player.r + (o.chest ? 42 : 30)) {
       if (o.chest) {
         collectChest(o);
       } else if (o.heal) {
-        player.hp = Math.min(100, player.hp + 26);
+        player.hp = Math.min(player.maxHp, player.hp + 26);
         addScore(20, o.x, o.y);
         burst(o.x, o.y, color.good, 22, 4);
       } else {
         addScore(55, o.x, o.y);
-        state.energy = Math.min(100, state.energy + 8);
+        gainEnergy(8);
         burst(o.x, o.y, color.gold, 22, 4);
       }
       tone(o.heal ? 680 : 820, 0.08, "triangle", 0.03);
@@ -885,6 +1131,41 @@ function updateParticles() {
 }
 
 function drawFloor() {
+  const sky = ctx.createLinearGradient(0, 0, 0, height);
+  sky.addColorStop(0, "rgba(36, 26, 55, 0.34)");
+  sky.addColorStop(0.48, "rgba(16, 13, 18, 0.08)");
+  sky.addColorStop(1, "rgba(0, 0, 0, 0.28)");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.globalAlpha = 0.42;
+  ctx.fillStyle = "rgba(242,195,93,0.08)";
+  ctx.beginPath();
+  ctx.ellipse(width / 2, height * 0.58, width * 0.42, height * 0.18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(134,216,255,0.09)";
+  ctx.lineWidth = 1;
+  const horizon = height * 0.36;
+  for (let i = 0; i < 9; i += 1) {
+    const t = i / 8;
+    const y = horizon + t * t * height * 0.58;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+  for (let i = -6; i <= 6; i += 1) {
+    ctx.beginPath();
+    ctx.moveTo(width / 2 + i * 18, horizon);
+    ctx.lineTo(width / 2 + i * width * 0.22, height);
+    ctx.stroke();
+  }
+  ctx.restore();
+
   ctx.save();
   ctx.translate(width / 2, height * 0.48);
   ctx.strokeStyle = "rgba(242,195,93,0.14)";
@@ -915,12 +1196,19 @@ function drawFloor() {
     ctx.fill();
   }
   ctx.restore();
+
+  const vignette = ctx.createRadialGradient(width / 2, height * 0.45, width * 0.1, width / 2, height * 0.5, width * 0.72);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.38)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
 }
 
 function drawPlayer() {
   if (player.invincible > 0 && Math.floor(player.invincible / 80) % 2 === 0) return;
   const speed = Math.hypot(player.vx, player.vy);
   const moving = speed > 0.22;
+  const outfit = outfitStyle();
   player.walk += moving ? 0.16 + Math.min(0.18, speed * 0.02) : 0.04;
   const bob = moving ? Math.sin(player.walk * 2) * 2.6 : Math.sin(player.walk * 0.7) * 1.2;
   const legSwing = Math.sin(player.walk * 2.2) * (moving ? 9 : 2);
@@ -943,10 +1231,84 @@ function drawPlayer() {
   ctx.shadowColor = weapon.glow;
   ctx.shadowBlur = 18 + grade * 7 + swing * 12;
   ctx.beginPath();
-  ctx.moveTo(10, -5);
-  ctx.quadraticCurveTo(18 + bladeLength * 0.45, -bladeWidth * (1.5 + grade * 0.12), 10 + bladeLength, -8 - bladeWidth * 0.3);
-  ctx.quadraticCurveTo(17 + bladeLength * 0.52, 6 + bladeWidth * (0.75 + grade * 0.08), 10, -5);
-  ctx.fill();
+  if (weapon.shape === "saber") {
+    ctx.moveTo(9, -4);
+    ctx.quadraticCurveTo(18 + bladeLength * 0.35, -bladeWidth * 1.65, 12 + bladeLength, -10);
+    ctx.quadraticCurveTo(20 + bladeLength * 0.46, bladeWidth * 0.58, 9, -4);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,107,58,0.75)";
+    ctx.beginPath();
+    ctx.moveTo(24, -9);
+    ctx.quadraticCurveTo(28 + bladeLength * 0.45, -bladeWidth * 1.12, 8 + bladeLength * 0.94, -10);
+    ctx.quadraticCurveTo(30 + bladeLength * 0.48, -2, 24, -9);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,44,12,0.86)";
+    for (let i = 0; i < 3; i += 1) {
+      ctx.beginPath();
+      const px = 24 + bladeLength * (0.28 + i * 0.18);
+      ctx.moveTo(px, -8);
+      ctx.quadraticCurveTo(px + 9 * bladeScale, -bladeWidth * 1.22, px + 18 * bladeScale, -9);
+      ctx.quadraticCurveTo(px + 8 * bladeScale, -15, px, -8);
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(65,31,18,0.9)";
+    ctx.beginPath();
+    ctx.moveTo(18 + bladeLength * 0.18, -3);
+    ctx.lineTo(10 + bladeLength * 0.72, -9);
+    ctx.lineTo(20 + bladeLength * 0.54, 4);
+    ctx.closePath();
+    ctx.fill();
+  } else if (weapon.shape === "hammer") {
+    ctx.strokeStyle = weapon.fill;
+    ctx.lineWidth = 5.5 * bladeScale;
+    ctx.lineCap = "round";
+    ctx.moveTo(2, 1);
+    ctx.lineTo(8 + bladeLength * 0.72, -9);
+    ctx.stroke();
+    ctx.fillStyle = weapon.fill;
+    ctx.beginPath();
+    ctx.roundRect(0 + bladeLength * 0.58, -31 * bladeScale, 46 * bladeScale, 34 * bladeScale, 7 * bladeScale);
+    ctx.fill();
+    ctx.strokeStyle = weapon.glow;
+    ctx.lineWidth = 2.2 * bladeScale;
+    ctx.stroke();
+    ctx.fillStyle = weapon.glow;
+    ctx.fillRect(8 + bladeLength * 0.75, -31 * bladeScale, 7 * bladeScale, 34 * bladeScale);
+    ctx.beginPath();
+    ctx.moveTo(0 + bladeLength * 0.58, -14 * bladeScale);
+    ctx.lineTo(-12 * bladeScale + bladeLength * 0.58, -22 * bladeScale);
+    ctx.lineTo(-12 * bladeScale + bladeLength * 0.58, -6 * bladeScale);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(24 + bladeLength * 0.77, -14 * bladeScale, 6 * bladeScale, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (weapon.shape === "scythe") {
+    ctx.strokeStyle = "#2b2635";
+    ctx.lineWidth = 6.5 * bladeScale;
+    ctx.lineCap = "round";
+    ctx.moveTo(-2, 4);
+    ctx.lineTo(16 + bladeLength * 0.92, -10);
+    ctx.stroke();
+    ctx.fillStyle = weapon.fill;
+    ctx.beginPath();
+    ctx.moveTo(14 + bladeLength * 0.62, -11);
+    ctx.quadraticCurveTo(24 + bladeLength * 1.05, -78 * bladeScale, 20 + bladeLength * 1.36, -22 * bladeScale);
+    ctx.quadraticCurveTo(22 + bladeLength * 1.02, -38 * bladeScale, 14 + bladeLength * 0.62, -11);
+    ctx.fill();
+    ctx.strokeStyle = weapon.glow;
+    ctx.lineWidth = 2.4 * bladeScale;
+    ctx.stroke();
+    ctx.fillStyle = weapon.glow;
+    ctx.beginPath();
+    ctx.arc(17 + bladeLength * 0.92, -35 * bladeScale, 5.5 * bladeScale, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.moveTo(10, -5);
+    ctx.quadraticCurveTo(18 + bladeLength * 0.45, -bladeWidth * (1.5 + grade * 0.12), 10 + bladeLength, -8 - bladeWidth * 0.3);
+    ctx.quadraticCurveTo(17 + bladeLength * 0.52, 6 + bladeWidth * (0.75 + grade * 0.08), 10, -5);
+    ctx.fill();
+  }
   ctx.strokeStyle = weapon.glow;
   ctx.lineWidth = Math.max(2, (2.2 + grade * 0.5) * bladeScale);
   ctx.beginPath();
@@ -974,7 +1336,7 @@ function drawPlayer() {
   ctx.restore();
 
   ctx.shadowBlur = 0;
-  ctx.fillStyle = "rgba(255, 92, 168, 0.72)";
+  ctx.fillStyle = outfit.cloak;
   ctx.beginPath();
   ctx.moveTo(-18, -9);
   ctx.quadraticCurveTo(-29, 10, -17, 34);
@@ -983,7 +1345,7 @@ function drawPlayer() {
   ctx.quadraticCurveTo(29, 10, 18, -9);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = "rgba(255, 190, 225, 0.75)";
+  ctx.strokeStyle = outfit.trim;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(-13, -4);
@@ -991,6 +1353,21 @@ function drawPlayer() {
   ctx.moveTo(13, -4);
   ctx.quadraticCurveTo(20, 12, 12, 28);
   ctx.stroke();
+
+  const outfitTier = Math.min(4, Math.floor((state.wave - 1) / 10));
+  if (outfitTier > 0) {
+    ctx.strokeStyle = outfit.glow;
+    ctx.lineWidth = 2 + outfitTier * 0.7;
+    ctx.shadowColor = outfit.glow;
+    ctx.shadowBlur = 10 + outfitTier * 4;
+    ctx.beginPath();
+    ctx.moveTo(-13, -11);
+    ctx.quadraticCurveTo(-25 - outfitTier * 3, -18, -33 - outfitTier * 3, 4);
+    ctx.moveTo(13, -11);
+    ctx.quadraticCurveTo(25 + outfitTier * 3, -18, 33 + outfitTier * 3, 4);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
 
   ctx.strokeStyle = "#2f4f48";
   ctx.lineWidth = 6;
@@ -1005,20 +1382,20 @@ function drawPlayer() {
   const gradient = ctx.createRadialGradient(-5, -8, 2, 0, 0, 25);
   gradient.addColorStop(0, player.hurt > 0 ? "#ffffff" : "#fff4c7");
   gradient.addColorStop(0.28, color.gold);
-  gradient.addColorStop(0.5, color.robe);
+  gradient.addColorStop(0.5, outfit.robe);
   gradient.addColorStop(1, "#122f2c");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.roundRect(-14, -13, 28, 31, 8);
   ctx.fill();
 
-  ctx.fillStyle = "#322115";
+  ctx.fillStyle = outfit.armor;
   ctx.beginPath();
   ctx.roundRect(-18, -9, 11, 16, 5);
   ctx.roundRect(7, -9, 11, 16, 5);
   ctx.fill();
 
-  ctx.strokeStyle = color.gold;
+  ctx.strokeStyle = outfit.glow;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(-8, -6);
@@ -1060,37 +1437,69 @@ function drawPlayer() {
 }
 
 function drawMonster(m) {
-  const body = m.boss ? color.boss : m.ranged ? color.ranged : m.fast ? color.fast : m.brute ? color.brute : color.monster;
-  const hop = Math.sin(m.wobble * 1.8) * (m.brute ? 1.2 : 2.1);
+  const body = m.finalBoss ? "#5c2a86" : m.boss ? color.boss : m.ranged ? color.ranged : m.fast ? color.fast : m.brute ? color.brute : color.monster;
+  const hop = Math.sin(m.wobble * 1.8) * (m.brute || m.finalBoss ? 1.2 : 2.1);
   ctx.save();
   ctx.translate(m.x, m.y + hop);
   ctx.shadowColor = body;
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = m.finalBoss ? 34 : 18;
   ctx.fillStyle = m.hitFlash > 0 ? color.white : body;
   ctx.beginPath();
-  if (m.fast) {
+  if (m.finalBoss) {
+    ctx.roundRect(-m.r * 1.08, -m.r, m.r * 2.16, m.r * 2.05, 16);
+  } else if (m.fast) {
     ctx.moveTo(0, -m.r * 1.05);
     ctx.bezierCurveTo(m.r, -m.r * 0.5, m.r * 0.82, m.r * 0.72, 0, m.r);
     ctx.bezierCurveTo(-m.r * 0.82, m.r * 0.72, -m.r, -m.r * 0.5, 0, -m.r * 1.05);
   } else if (m.ranged) {
-    ctx.arc(0, 0, m.r * 0.95, 0, Math.PI * 2);
+    ctx.moveTo(0, -m.r);
+    ctx.lineTo(m.r * 0.95, 0);
+    ctx.lineTo(0, m.r);
+    ctx.lineTo(-m.r * 0.95, 0);
+    ctx.closePath();
+  } else if (m.brute) {
+    ctx.roundRect(-m.r, -m.r * 0.68, m.r * 2, m.r * 1.65, 6);
   } else {
     ctx.roundRect(-m.r * 0.9, -m.r * 0.75, m.r * 1.8, m.r * 1.65, 10);
   }
   ctx.fill();
-  ctx.fillStyle = m.boss ? color.hit : color.gold;
+  ctx.fillStyle = m.finalBoss ? "#ff4f7b" : m.boss ? color.hit : color.gold;
   ctx.beginPath();
-  ctx.moveTo(-m.r * 0.55, -m.r * 0.7);
-  ctx.lineTo(-m.r * 0.9, -m.r * 1.15);
-  ctx.lineTo(-m.r * 0.25, -m.r * 0.82);
-  ctx.moveTo(m.r * 0.55, -m.r * 0.7);
-  ctx.lineTo(m.r * 0.9, -m.r * 1.15);
-  ctx.lineTo(m.r * 0.25, -m.r * 0.82);
+  if (m.finalBoss) {
+    for (let i = -1; i <= 1; i += 1) {
+      ctx.moveTo(i * m.r * 0.42, -m.r * 0.82);
+      ctx.lineTo(i * m.r * 0.58, -m.r * 1.38);
+      ctx.lineTo(i * m.r * 0.18, -m.r * 0.96);
+    }
+  } else {
+    ctx.moveTo(-m.r * 0.55, -m.r * 0.7);
+    ctx.lineTo(-m.r * 0.9, -m.r * 1.15);
+    ctx.lineTo(-m.r * 0.25, -m.r * 0.82);
+    ctx.moveTo(m.r * 0.55, -m.r * 0.7);
+    ctx.lineTo(m.r * 0.9, -m.r * 1.15);
+    ctx.lineTo(m.r * 0.25, -m.r * 0.82);
+  }
   ctx.fill();
+  if (m.ranged) {
+    ctx.strokeStyle = color.magic;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, m.r * 1.18, -0.7, 0.7);
+    ctx.stroke();
+  }
+  if (m.brute || m.finalBoss) {
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-m.r * 0.72, m.r * 0.28);
+    ctx.lineTo(m.r * 0.72, m.r * 0.28);
+    ctx.stroke();
+  }
   ctx.fillStyle = "#160b1f";
   ctx.beginPath();
-  ctx.arc(-m.r * 0.34, -m.r * 0.12, m.r * 0.14, 0, Math.PI * 2);
-  ctx.arc(m.r * 0.34, -m.r * 0.12, m.r * 0.14, 0, Math.PI * 2);
+  ctx.arc(-m.r * 0.34, -m.r * 0.12, m.r * (m.finalBoss ? 0.12 : 0.14), 0, Math.PI * 2);
+  ctx.arc(m.r * 0.34, -m.r * 0.12, m.r * (m.finalBoss ? 0.12 : 0.14), 0, Math.PI * 2);
+  if (m.finalBoss) ctx.arc(0, -m.r * 0.28, m.r * 0.1, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fillRect(-m.r, m.r + 6, m.r * 2, 4);
@@ -1138,9 +1547,26 @@ function drawSlash(s) {
   ctx.shadowColor = glow;
   ctx.shadowBlur = s.full ? 34 : 22;
   ctx.translate(s.x, s.y);
-  ctx.rotate(s.angle);
+  ctx.rotate(s.angle + (s.spiral ? performance.now() * 0.006 : 0));
   ctx.beginPath();
-  ctx.arc(0, 0, s.r, s.full ? 0 : -0.85, s.full ? Math.PI * 2 : 0.85);
+  if (s.beam) {
+    ctx.moveTo(0, 0);
+    ctx.lineTo(s.max, 0);
+    ctx.stroke();
+    ctx.globalAlpha *= 0.45;
+    ctx.lineWidth *= 2.4;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(s.max, 0);
+  } else if (s.spiral) {
+    ctx.arc(0, 0, s.r, -1.15, 1.15);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(s.r * 0.45, 0);
+    ctx.lineTo(s.r * 1.08, 0);
+  } else {
+    ctx.arc(0, 0, s.r, s.full ? 0 : -0.85, s.full ? Math.PI * 2 : 0.85);
+  }
   ctx.stroke();
   ctx.restore();
 }
@@ -1159,12 +1585,18 @@ function drawUltimates() {
     ctx.translate(u.x, u.y);
     ctx.rotate(u.angle + performance.now() * 0.004);
     ctx.beginPath();
-    ctx.moveTo(-u.r * 0.15, 0);
-    ctx.lineTo(u.r, 0);
+    if (u.ring) {
+      ctx.arc(0, 0, u.r, 0, Math.PI * 2);
+    } else {
+      ctx.moveTo(-u.r * 0.15, 0);
+      ctx.lineTo(u.r, 0);
+    }
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, u.r * 0.48, -0.4, 0.4);
-    ctx.stroke();
+    if (!u.ring) {
+      ctx.beginPath();
+      ctx.arc(0, 0, u.r * 0.48, -0.4, 0.4);
+      ctx.stroke();
+    }
     ctx.restore();
   }
   if (state.ultimateTimer > 0) {
